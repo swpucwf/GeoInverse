@@ -1,0 +1,14 @@
+# 忽略IntelliJ IDEA项目文件
+.idea/
+*.iml
+
+# 忽略视频文件
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# 忽略CSV文件
+*.csv
+
+# ... existing code ...

@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: geoinverse
+Version: 0.1.0
+Summary: A geophysical inversion package for electromagnetic methods
+Author: Chen Weifeng
+Requires-Python: >=3.6
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: matplotlib

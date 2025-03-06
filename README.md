@@ -64,6 +64,30 @@ python run_inversion.py --method Occam --data example_data.csv
 
 ## **📊 结果示例**
 
+### **🔹 反演结果可视化**
+```python
+# 绘制反演结果
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+
+# 绘制测量数据与拟合数据对比
+inv.plot_data_fit(result, ax=ax[0])
+
+# 绘制反演模型
+inv.plot_model(result, ax=ax[1])
+
+plt.tight_layout()
+plt.show()
+```
+
+### **🔹 参数敏感性分析**
+```python
+# 进行参数敏感性分析
+sensitivity = inv.analyze_sensitivity(result)
+
+# 绘制敏感性矩阵
+inv.plot_sensitivity(sensitivity)
+```
+
 ---
 
 ## **🛠 目录结构**
@@ -102,5 +126,5 @@ LWD-EM-Inv/
 ---
 
 ## **📜 许可证**
-本项目基于 **  Apache License Version 2.0** 开源，详细信息请见 [LICENSE](LICENSE)。  
+本项目基于 **  Apache License Version 2.0** 开源，详细信息请见 [LICENSE](LICENSE)。
 

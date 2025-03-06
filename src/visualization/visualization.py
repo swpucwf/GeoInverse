@@ -3,6 +3,46 @@ import matplotlib.pyplot as plt
 from typing import List, Tuple, Optional, Union
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from src.model.model import LayeredEarthModel
+
+__all__ = ['plot_model', 'plot_response']
+
+def plot_model(model: LayeredEarthModel, ax=None, depth_range: Optional[Tuple[float, float]] = None,
+            show_parameters: bool = True) -> None:
+    """
+    绘制地层模型
+    
+    Args:
+        model: 分层地球模型对象
+        ax: matplotlib轴对象，如果为None则创建新的图形
+        depth_range: 绘图的深度范围，格式为(min_depth, max_depth)
+        show_parameters: 是否显示地层参数
+    """
+    model.plot(ax=ax, depth_range=depth_range, show_parameters=show_parameters)
+
+
+def plot_response(response: np.ndarray, frequencies: List[float], offsets: List[float],
+                 plot_type: str = 'amplitude', ax: Optional[Axes] = None,
+                 title: Optional[str] = None) -> Axes:
+    """
+    绘制电磁场响应
+    
+    Args:
+        response: 电磁场响应数组，形状为(频率数, 偏移距数)
+        frequencies: 频率列表 (Hz)
+        offsets: 偏移距列表 (m)
+        plot_type: 绘图类型，可选'amplitude'或'phase'
+        ax: matplotlib轴对象，如果为None则创建新的图形
+        title: 图形标题
+        
+    Returns:
+        Axes: 绘图轴对象
+    """
+    return EMVisualization.plot_field_response(
+        np.array(frequencies), np.array(offsets), response,
+        plot_type=plot_type, ax=ax, title=title
+    )
+
 
 class EMVisualization:
     """电磁场响应可视化类

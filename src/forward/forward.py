@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List, Tuple, Optional
 
-class EMForward1D:
+class ForwardSolver:
     """一维电磁波正演模拟类
     
     实现基于解析解的一维分层介质中电磁波传播特性计算
@@ -95,6 +95,23 @@ class EMForward1D:
                 response[i, j] = total_field
         
         return response
+    
+    def compute_response(self, model):
+        """计算地层模型的电磁场响应
+        
+        Args:
+            model: LayeredEarthModel对象，表示分层地球模型
+            
+        Returns:
+            np.ndarray: 形状为(频率数, 偏移距数)的复数数组，表示电磁场响应
+        """
+        # 将LayeredEarthModel转换为forward方法需要的格式
+        layers = []
+        for layer in model.layers:
+            layers.append((layer.thickness, layer.resistivity))
+            
+        # 调用forward方法计算响应
+        return self.forward(layers)
     
     def plot_response(self, response: np.ndarray,
                       plot_type: str = 'amplitude',

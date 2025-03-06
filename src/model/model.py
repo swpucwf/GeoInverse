@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Tuple, Optional, Union
 from dataclasses import dataclass
+from .base_model import BaseModel
 
 @dataclass
 class Layer:
@@ -17,7 +18,7 @@ class Layer:
     relative_permittivity: float = 1.0
     relative_permeability: float = 1.0
 
-class LayeredEarthModel:
+class LayeredEarthModel(BaseModel):
     """分层地球模型类
     
     用于定义和管理分层地球模型的参数，支持参数化描述和可视化
@@ -26,19 +27,44 @@ class LayeredEarthModel:
         layers: 地层列表，从上到下排列
     """
     
-    def __init__(self, layers: List[Layer]):
+    def __init__(self, layers: List[Layer], name: str = "LayeredEarth"):
         """初始化分层地球模型
         
         Args:
             layers: 地层参数列表，从上到下排列
                    最后一层的thickness应为None，表示半无限空间
+            name: 模型名称
         """
+        super().__init__(name)
         if not layers:
             raise ValueError("地层列表不能为空")
         if layers[-1].thickness is not None:
             raise ValueError("最后一层必须是半无限空间（thickness=None）")
         
         self.layers = layers
+        
+    @classmethod
+    def from_depths_resistivities(cls, depths: List[float], resistivities: List[float]):
+        """从深度列表和电阻率列表创建地层模型
+        
+        Args:
+            depths: 层界面深度列表，从上到下排列，最后一个元素应为np.inf
+            resistivities: 各层电阻率列表
+            
+        Returns:
+            LayeredEarthModel: 创建的地层模型对象
+        """
+        if len(depths) != len(resistivities) + 1:
+            raise ValueError("深度列表长度应比电阻率列表长度多1")
+        if depths[-1] != np.inf:
+            raise ValueError("最后一层深度应为无限(np.inf)")
+            
+        layers = []
+        for i in range(len(resistivities)):
+            thickness = depths[i+1] - depths[i] if depths[i+1] != np.inf else None
+            layers.append(Layer(thickness=thickness, resistivity=resistivities[i]))
+            
+        return cls(layers)
         
     @property
     def n_layers(self) -> int:
@@ -140,3 +166,26 @@ class LayeredEarthModel:
         # 添加颜色条
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         plt.colorbar(sm, ax=ax, label='log10(电阻率 Ω·m)')
+
+    def validate(self) -> bool:
+        """验证模型参数的有效性
+        
+        Returns:
+            bool: 参数是否有效
+        """
+        if not self.layers:
+            return False
+        if self.layers[-1].thickness is not None:
+            return False
+        
+        for layer in self.layers:
+            if layer.resistivity <= 0:
+                return False
+            if layer.relative_permittivity <= 0:
+                return False
+            if layer.relative_permeability <= 0:
+                return False
+            if layer.thickness is not None and layer.thickness <= 0:
+                return False
+        
+        return True

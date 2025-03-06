@@ -7,11 +7,20 @@ from .base_model import BaseModel
 class Layer:
     """地层模型的单层参数类
     
+    用于描述分层地球模型中单个地层的物理参数，包括厚度、电阻率、相对介电常数和相对磁导率。
+    最后一层（半无限空间）的厚度应设置为None。
+    
     Attributes:
-        thickness: 层厚度 (m)，对于半无限空间可以为None
-        resistivity: 电阻率 (Ω·m)
-        relative_permittivity: 相对介电常数
-        relative_permeability: 相对磁导率
+        thickness (Optional[float]): 层厚度，单位为米(m)。对于半无限空间（最后一层）应设置为None
+        resistivity (float): 地层电阻率，单位为欧姆·米(Ω·m)，必须大于0
+        relative_permittivity (float): 地层相对介电常数，无量纲，默认为1.0，必须大于0
+        relative_permeability (float): 地层相对磁导率，无量纲，默认为1.0，必须大于0
+        
+    Example:
+        >>> # 创建一个20米厚、电阻率为100的地层
+        >>> layer1 = Layer(thickness=20.0, resistivity=100.0)
+        >>> # 创建一个半无限空间（最后一层），电阻率为500
+        >>> layer2 = Layer(thickness=None, resistivity=500.0)
     """
     thickness: Optional[float]
     resistivity: float
@@ -21,19 +30,36 @@ class Layer:
 class LayeredEarthModel(BaseModel):
     """分层地球模型类
     
-    用于定义和管理分层地球模型的参数，支持参数化描述和可视化
+    用于定义和管理分层地球模型的参数，支持参数化描述和可视化。模型由多个地层组成，
+    每个地层具有其独特的物理参数（厚度、电阻率等）。最后一层必须是半无限空间（厚度为None）。
     
     Attributes:
-        layers: 地层列表，从上到下排列
+        layers (List[Layer]): 地层列表，从上到下排列，最后一层必须是半无限空间
+        name (str): 模型名称，用于标识不同的模型实例
+        
+    Example:
+        >>> # 创建一个三层地球模型
+        >>> layer1 = Layer(thickness=10.0, resistivity=100.0)
+        >>> layer2 = Layer(thickness=20.0, resistivity=50.0)
+        >>> layer3 = Layer(thickness=None, resistivity=500.0)  # 半无限空间
+        >>> model = LayeredEarthModel([layer1, layer2, layer3])
+        
+        >>> # 使用深度和电阻率列表创建模型
+        >>> depths = [0.0, 10.0, 30.0, np.inf]  # 层界面深度
+        >>> resistivities = [100.0, 50.0, 500.0]  # 各层电阻率
+        >>> model = LayeredEarthModel.from_depths_resistivities(depths, resistivities)
     """
     
     def __init__(self, layers: List[Layer], name: str = "LayeredEarth"):
         """初始化分层地球模型
         
         Args:
-            layers: 地层参数列表，从上到下排列
-                   最后一层的thickness应为None，表示半无限空间
-            name: 模型名称
+            layers (List[Layer]): 地层参数列表，从上到下排列。最后一层的thickness必须为None，
+                                表示半无限空间
+            name (str): 模型名称，默认为"LayeredEarth"
+            
+        Raises:
+            ValueError: 当地层列表为空或最后一层不是半无限空间时
         """
         super().__init__(name)
         if not layers:
@@ -48,11 +74,20 @@ class LayeredEarthModel(BaseModel):
         """从深度列表和电阻率列表创建地层模型
         
         Args:
-            depths: 层界面深度列表，从上到下排列，最后一个元素应为np.inf
-            resistivities: 各层电阻率列表
+            depths (List[float]): 层界面深度列表，从上到下排列，第一个元素应为0.0，
+                                最后一个元素应为np.inf
+            resistivities (List[float]): 各层电阻率列表，长度应比depths少1
             
         Returns:
             LayeredEarthModel: 创建的地层模型对象
+            
+        Raises:
+            ValueError: 当深度列表长度不正确或最后一层深度不是无限时
+            
+        Example:
+            >>> depths = [0.0, 10.0, 30.0, np.inf]
+            >>> resistivities = [100.0, 50.0, 500.0]
+            >>> model = LayeredEarthModel.from_depths_resistivities(depths, resistivities)
         """
         if len(depths) != len(resistivities) + 1:
             raise ValueError("深度列表长度应比电阻率列表长度多1")
@@ -68,12 +103,20 @@ class LayeredEarthModel(BaseModel):
         
     @property
     def n_layers(self) -> int:
-        """地层数量"""
+        """地层数量
+        
+        Returns:
+            int: 模型中的地层总数
+        """
         return len(self.layers)
     
     @property
     def depths(self) -> np.ndarray:
-        """计算每层顶部的深度"""
+        """计算每层顶部的深度
+        
+        Returns:
+            np.ndarray: 各层顶部深度数组，从上到下排列，第一个元素为0.0
+        """
         depths = [0.0]  # 第一层顶部深度为0
         current_depth = 0.0
         
@@ -89,10 +132,10 @@ class LayeredEarthModel(BaseModel):
         
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-                thicknesses: 各层厚度数组
-                resistivities: 各层电阻率数组
-                permittivities: 各层相对介电常数数组
-                permeabilities: 各层相对磁导率数组
+                - thicknesses: 各层厚度数组，最后一层为np.inf
+                - resistivities: 各层电阻率数组
+                - permittivities: 各层相对介电常数数组
+                - permeabilities: 各层相对磁导率数组
         """
         thicknesses = []
         resistivities = []
@@ -112,10 +155,13 @@ class LayeredEarthModel(BaseModel):
             show_parameters: bool = True) -> None:
         """绘制地层模型
         
+        生成地层模型的可视化图形，包括地层界面、电阻率分布和物理参数标注。
+        
         Args:
-            ax: matplotlib轴对象，如果为None则创建新的图形
-            depth_range: 绘图的深度范围，格式为(min_depth, max_depth)
-            show_parameters: 是否显示地层参数
+            ax (matplotlib.axes.Axes, optional): matplotlib轴对象，如果为None则创建新的图形
+            depth_range (Optional[Tuple[float, float]]): 绘图的深度范围，格式为(min_depth, max_depth)
+                如果为None，则自动设置合适的深度范围
+            show_parameters (bool): 是否显示地层参数，默认为True
         """
         import matplotlib.pyplot as plt
         
@@ -170,8 +216,14 @@ class LayeredEarthModel(BaseModel):
     def validate(self) -> bool:
         """验证模型参数的有效性
         
+        检查所有地层参数是否在合理的物理范围内，包括：
+        1. 地层列表不能为空
+        2. 最后一层必须是半无限空间
+        3. 所有物理参数必须为正值
+        4. 所有有限层的厚度必须为正值
+        
         Returns:
-            bool: 参数是否有效
+            bool: 如果所有参数都有效则返回True，否则返回False
         """
         if not self.layers:
             return False

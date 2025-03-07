@@ -153,16 +153,6 @@ class LayeredEarthModel(BaseModel):
     
     def plot(self, ax=None, depth_range: Optional[Tuple[float, float]] = None,
             show_parameters: bool = True) -> None:
-        """绘制地层模型
-        
-        生成地层模型的可视化图形，包括地层界面、电阻率分布和物理参数标注。
-        
-        Args:
-            ax (matplotlib.axes.Axes, optional): matplotlib轴对象，如果为None则创建新的图形
-            depth_range (Optional[Tuple[float, float]]): 绘图的深度范围，格式为(min_depth, max_depth)
-                如果为None，则自动设置合适的深度范围
-            show_parameters (bool): 是否显示地层参数，默认为True
-        """
         import matplotlib.pyplot as plt
         
         if ax is None:
@@ -176,22 +166,16 @@ class LayeredEarthModel(BaseModel):
                 max_depth = 100  # 默认深度范围
             depth_range = (0, max_depth)
         
-        # 绘制地层界面
-        for i, depth in enumerate(depths):
-            if depth <= depth_range[1]:
-                ax.axhline(y=depth, color='k', linestyle='-', linewidth=0.5)
-        
-        # 填充地层颜色
-        cmap = plt.cm.viridis  # 使用viridis颜色映射
+        # 使用更鲜明的颜色映射
+        cmap = plt.cm.Set3  # 使用Set3颜色映射，颜色更加分明
         resistivities = np.array([layer.resistivity for layer in self.layers])
-        norm = plt.Normalize(vmin=np.log10(min(resistivities)),
-                           vmax=np.log10(max(resistivities)))
         
+        # 绘制地层填充
         for i in range(len(depths)):
             y_top = depths[i]
             y_bottom = depths[i+1] if i < len(depths)-1 else depth_range[1]
-            color = cmap(norm(np.log10(self.layers[i].resistivity)))
-            ax.fill_between([-1, 1], y_top, y_bottom, color=color, alpha=0.5)
+            color = cmap(i % cmap.N)  # 循环使用颜色映射中的颜色
+            ax.fill_between([-60, 100], y_top, y_bottom, color=color, alpha=0.7)
             
             # 添加参数标注
             if show_parameters:
@@ -201,17 +185,27 @@ class LayeredEarthModel(BaseModel):
                     text += f"\nεr={self.layers[i].relative_permittivity:.1f}"
                 if self.layers[i].relative_permeability != 1.0:
                     text += f"\nμr={self.layers[i].relative_permeability:.1f}"
-                ax.text(0, y_text, text, ha='center', va='center')
+                ax.text(-40, y_text, text, ha='left', va='center',
+                       bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+        
+        # 绘制地层界面
+        for i, depth in enumerate(depths):
+            if depth <= depth_range[1]:
+                ax.axhline(y=depth, color='black', linestyle='-', linewidth=1.0)
         
         # 设置坐标轴
         ax.set_ylim(depth_range[1], depth_range[0])  # 反转y轴方向
-        ax.set_xlim(-1, 1)
+        ax.set_xlim(-60, 100)
         ax.set_ylabel('深度 (m)')
         ax.set_xticks([])
         
         # 添加颜色条
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        plt.colorbar(sm, ax=ax, label='log10(电阻率 Ω·m)')
+        sm = plt.cm.ScalarMappable(cmap=cmap)
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax)
+        cbar.set_label('地层编号')
+        cbar.set_ticks(np.linspace(0, 1, len(self.layers)))
+        cbar.set_ticklabels([f'层{i+1}' for i in range(len(self.layers))])
 
     def validate(self) -> bool:
         """验证模型参数的有效性

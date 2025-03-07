@@ -7,3 +7,9 @@ geoinverse.egg-info/dependency_links.txt
 geoinverse.egg-info/requires.txt
 geoinverse.egg-info/top_level.txt
 src/__init__.py
+src/forward/__init__.py
+src/forward/forward.py
+src/forward/forward_2d.py
+src/inversion/__init__.py
+src/inversion/base_inversion_2d.py
+src/inversion/occam_inversion_2d.py

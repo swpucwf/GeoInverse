@@ -84,19 +84,43 @@ pytest                    # 含 3D 反演等耗时用例
 
 ---
 
-## **📊 结果示例**
+## **📊 案例与示意图**
 
-### **🔹 正演结果三件套（模型图 / 网格图 / 响应图）**
-每个正演示例（`lwd_fdem_forward_{1d,2d,3d}.py`）运行后除对比图外，还会输出
-`{prefix}_model.png`、`{prefix}_mesh.png`、`{prefix}_response.png` 三张判据图，
-绘制风格对齐 `external/SimPEG-src/fdem_forward_validation`：
-- **模型图**：1D 为层状示意（空气层+地表+按 σ 着色层块+σ/ρ/层名+层厚 h+井眼+Tx/Rx 线圈），2D/3D 为 log10(σ) 剖面
-- **网格图**：1D 分层界面；2D/3D 在 log10(σ) 剖面上叠加网格线（core+padding 疏密）并标注收发线圈
-- **响应图**：1D 为 loglog |响应|-频率 频散曲线（可叠加解析解），2D/3D 为 |响应|-收发距
+> 以下图件均由 `examples/lwd_fdem_*.py` 生成；正演三件套（模型 / 网格 / 响应）
+> 绘制风格对齐 `external/SimPEG-src/fdem_forward_validation`。
+
+### **案例 1 · 1D 层状正演（4 频 × 3 收发距，径向 Hz 二次场）**
+三层地电模型（2 m / 4 m 层 + 半空间，σ = 0.25 / 0.01 / 0.5 S/m）。
+
+| 模型图（层状示意） | 网格图（分层界面） | 响应图（loglog 频散） |
+|:---:|:---:|:---:|
+| <img src="docs/images/lwd_fdem_forward_1d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_1d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_1d_response.png" width="250"> |
+
+### **案例 2 · 2D 轴对称正演（r-z，环状低阻异常）**
+
+| 模型图 log10(σ) | 网格图（core+padding 叠加网格） | 响应图（\|d\|-收发距） |
+|:---:|:---:|:---:|
+| <img src="docs/images/lwd_fdem_forward_2d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_2d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_2d_response.png" width="250"> |
+
+### **案例 3 · 3D 直角正演（y=0 切片，井旁方块导体）**
+
+| 模型图 log10(σ) | 网格图（core+padding 叠加网格） | 响应图（\|d\|-收发距） |
+|:---:|:---:|:---:|
+| <img src="docs/images/lwd_fdem_forward_3d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_3d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_3d_response.png" width="250"> |
+
+### **案例 4 · Occam 反演结果回收（合成数据）**
+
+| 1D 反演（数据拟合 + 恢复模型） | 2D 反演 |
+|:---:|:---:|
+| <img src="docs/images/lwd_fdem_inversion_1d.png" width="360"> | <img src="docs/images/lwd_fdem_inversion_2d.png" width="360"> |
+
+### **🔹 正演三件套绘图 API**
+每个正演示例运行后输出 `{prefix}_model.png`、`{prefix}_mesh.png`、
+`{prefix}_response.png` 三张判据图，可一键生成：
 ```python
 from src.lwd_fdem import plot_forward_views   # 或 fwd.plot_views(...)
 
-# 一次性绘制并保存三类图到 examples/figs/
+# 一次性绘制并保存三类图（out_dir 建议 examples/figs）
 views = fwd.plot_views(sigma, d, out_dir="examples/figs",
                        prefix="lwd_fdem_forward_2d",
                        labels=("上覆层", "高阻层", "半空间"))  # 1D 层名可选
@@ -107,38 +131,16 @@ from src.lwd_fdem import plot_model, plot_mesh
 plot_mesh(fwd, sigma=sigma)   # 网格图（log10 σ + 网格叠加）
 ```
 
-### **🔹 反演结果可视化**
-```python
-# 绘制反演结果
-fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-
-# 绘制测量数据与拟合数据对比
-inv.plot_data_fit(result, ax=ax[0])
-
-# 绘制反演模型
-inv.plot_model(result, ax=ax[1])
-
-plt.tight_layout()
-plt.show()
-```
-
-### **🔹 参数敏感性分析**
-```python
-# 进行参数敏感性分析
-sensitivity = inv.analyze_sensitivity(result)
-
-# 绘制敏感性矩阵
-inv.plot_sensitivity(sensitivity)
-```
-
 ---
 
 ## **🛠 目录结构**
 ```
 LWD-EM-Inv/
-│── docs/                     # 文档（编码规范、架构说明）
+│── docs/                     # 文档（编码规范、架构说明、项目知识库）
 │   ├── CODING_STANDARDS.md   # 编码规范
-│   └── ARCHITECTURE.md       # SimPEG 架构拆解与模块映射
+│   ├── ARCHITECTURE.md       # SimPEG 架构拆解与模块映射
+│   ├── PROJECT_MEMORY.md     # 项目知识库（长期记忆的仓库内镜像）
+│   └── images/               # README 案例示意图（由 examples 生成）
 │── examples/                 # 示例代码（LWD FDEM 正反演等）
 │── src/                      # 核心代码
 │   ├── forward/              # 解析法正演模块（1D/2D）
@@ -171,7 +173,7 @@ LWD-EM-Inv/
 ## **📧 联系方式**
 📌 **作者**: swpucwf
 📌 **邮箱**: swpucwf@126.com  
-📌 **GitHub**: [your_username](https://github.com/swpucwf)  
+📌 **GitHub**: https://github.com/swpucwf
 
 ---
 

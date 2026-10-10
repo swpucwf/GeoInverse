@@ -30,6 +30,7 @@ from .forward import LWDFDEMForward
 __all__ = [
     "pub_style", "plot_model", "plot_mesh", "plot_response",
     "plot_forward_figure", "plot_inversion_figure", "plot_forward_views",
+    "set_cjk_rcparams", "fix_log_labels",
 ]
 
 # ------------------------------------------------------------------ #
@@ -82,6 +83,60 @@ def pub_style(**overrides):
         yield
     finally:
         matplotlib.rcParams.update(old)
+
+
+# ------------------------------------------------------------------ #
+# 通用样式工具（供所有 example/脚本复用）
+# ------------------------------------------------------------------ #
+def set_cjk_rcparams() -> None:
+    """配置中文字体与数学负号，供所有脚本统一调用（幂等）。
+
+    背景：将 `font.sans-serif` 设为 SimHei 后，普通文本可正常显示中文，
+    但 SimHei 缺少数学负号字形 U+2212；且 `axes.unicode_minus=False` 仅对
+    普通文本生效，管不到 mathtext（对数轴刻度、公式标签）。本函数将
+    mathtext 字体集固定为 stix（自带负号字形），从源头缓解缺字问题；
+    对数轴刻度的残留问题再配合 `fix_log_labels()` 彻底解决。
+    """
+    matplotlib.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
+    matplotlib.rcParams["axes.unicode_minus"] = False
+    matplotlib.rcParams["mathtext.fontset"] = "stix"
+
+
+def fix_log_labels(fig):
+    """将图内所有对数轴的刻度标签改用纯 mathtext（不含 \\mathdefault）。
+
+    背景：matplotlib 默认对数轴标签为 $\\mathdefault{10^{-4}}$，其中
+    \\mathdefault 会解析到正文字体（如 SimHei，缺 U+2212 负号），导致指数
+    显示为方框。本函数用 FuncFormatter 输出 $10^{-4}$ 形式的纯 mathtext，
+    负号由 mathtext fontset（stix）自带字形渲染，彻底规避缺字问题。
+
+    Args:
+        fig: matplotlib Figure 对象；就地修改其下所有 log 尺度坐标轴。
+
+    Returns:
+        fig（便于链式调用）。
+    """
+    import math
+    from matplotlib.ticker import FuncFormatter
+
+    def _fmt(x, pos):
+        if x is None or x <= 0:
+            return ""
+        e = math.floor(math.log10(x))
+        m = int(round(x / 10 ** e))
+        if m == 1:
+            return f"$10^{{{e}}}$"
+        if m in (2, 5):
+            return f"${m}\\times10^{{{e}}}$"
+        return ""
+
+    formatter = FuncFormatter(_fmt)
+    for ax in fig.axes:
+        if ax.get_xscale() == "log":
+            ax.xaxis.set_major_formatter(formatter)
+        if ax.get_yscale() == "log":
+            ax.yaxis.set_major_formatter(formatter)
+    return fig
 
 
 # ------------------------------------------------------------------ #

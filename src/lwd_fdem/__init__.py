@@ -30,6 +30,8 @@ from .plotting import (
     plot_model,
     plot_response,
     pub_style,
+    set_cjk_rcparams,
+    fix_log_labels,
 )
 from .survey import LWDToolConfig, build_receivers, build_survey, data_order
 
@@ -56,4 +58,6 @@ __all__ = [
     "plot_forward_figure",
     "plot_inversion_figure",
     "pub_style",
+    "set_cjk_rcparams",
+    "fix_log_labels",
 ]

@@ -110,6 +110,22 @@ plot_inversion_figure(fwd, rec_sigma, history, sigma_true=sigma_true,
                       out_dir="examples/figs", prefix="lwd_fdem_inversion_1d")
 ```
 
+## 井型正反演示例
+
+除基础示例外，`examples/` 提供成对的水平井 / 垂直井案例（均中英双语、图版按案例分目录）：
+
+| 示例脚本 | 井型/几何 | 演示内容 |
+|---|---|---|
+| `horizontal_well_3layer.py` | 水平井 · 1D 层状 · 径向偏移 | 建模→网格→观测→正演→合成数据→Occam 反演→收敛（图 01–07） |
+| `vertical_well_3layer.py` | 垂直井 · 2D 轴对称 · 轴向偏移 | 磁偶极子点接收、沿深度连续穿透扫描、实部/虚部/幅值/相位（图 01–05） |
+| `horizontal_well_advanced.py` | 水平井 · 1D | 二次场 vs 总场；Occam 平滑 vs 稀疏反演 |
+| `vertical_well_advanced.py` | 垂直井 · 2D | 磁偶极子 vs 回线源 CircularLoop；Occam vs 稀疏反演 |
+
+> 进阶示例演示了此前“底层具备、示例未接入”的能力，并在**不改底层代码**前提下用业务层
+> 子类封装规避了两处 `LWDFDEMInversion(sparse=True)` 限制：① `BetaSchedule` 与 `UpdateIRLS`
+> 冲突（子类过滤掉 BetaSchedule）；② 稀疏 `norms` 长度须 = 1+网格维数（2D 传 `[0,1,1]`）。
+> 这两处业务层封装本身的修正列为待做 TODO。
+
 ## 目录结构
 
 ```
@@ -135,7 +151,7 @@ LWD-EM-Inv/
 ### 源（发射）
 
 - [x] 竖直磁偶极子 `MagDipole`（点偶极）——水平井/垂直井示例已用
-- [x] 有限尺寸圆形回线源 `CircularLoop`（`LWDToolConfig(source_type="circular_loop")` 已接入）
+- [x] 有限尺寸圆形回线源 `CircularLoop`（`source_type="circular_loop"` 已接入；注：1D 层状仅支持零偏移中心回线，带偏移的源型对比见 2D 示例 `vertical_well_advanced.py`）
 - [x] 任意/倾斜取向磁偶极子（`MagDipole(orientation=...)` 支持非轴向量）
 - [x] 接地线电流源 `LineCurrent`、任意矢量源 `RawVec/RawVec_e/RawVec_m`
 - [~] 多分量源阵列（三轴/方位天线）——可多源组合，业务层未封装
@@ -168,7 +184,7 @@ LWD-EM-Inv/
 ### 反演
 
 - [x] Occam 风格：log-σ 参数化、WLS 平滑、β 冷却、目标拟合差停止
-- [x] 稀疏/块状正则化（`regularization.Sparse`，`LWDFDEMInversion(sparse=True)`）
+- [x] 稀疏/块状正则化（`regularization.Sparse`；注：`LWDFDEMInversion(sparse=True)` 有业务层封装 bug——BetaSchedule/UpdateIRLS 冲突、norms 长度需=1+dim；示例经子类规避（`*_advanced.py`），封装本身待修）
 - [x] 参数化模型反演（`ParametricLayer/ParametricCasingAndLayer/ParametricBlock` 等 maps）
 - [~] 交叉梯度/结构耦合/PGI 联合反演（`CrossGradient/PGI/JTV` 底层具备，业务层未封装联合管线）
 - [ ] 各向异性参数反演（依赖上面的各向异性正演）

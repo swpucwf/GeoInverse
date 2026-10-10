@@ -19,16 +19,17 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import matplotlib
 matplotlib.use("Agg")
-# 中文标注字体（Windows 自带黑体，避免 CJK Glyph missing 警告）
-matplotlib.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
-matplotlib.rcParams["axes.unicode_minus"] = False
 import matplotlib.pyplot as plt
 import numpy as np
 
 from src.lwd_fdem import (
     LWDFDEMForward, LWDFDEMInversion, LWDToolConfig,
     add_synthetic_noise, build_2d_cyl_mesh, make_data_object,
+    set_cjk_rcparams,
 )
+
+# 中文字体 + 数学负号统一配置（复用项目级公共工具）
+set_cjk_rcparams()
 
 FIG_DIR = pathlib.Path(__file__).parent / "figs"
 FIG_DIR.mkdir(exist_ok=True)

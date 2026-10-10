@@ -30,7 +30,7 @@ from .forward import LWDFDEMForward
 __all__ = [
     "pub_style", "plot_model", "plot_mesh", "plot_response",
     "plot_forward_figure", "plot_inversion_figure", "plot_forward_views",
-    "set_cjk_rcparams", "fix_log_labels",
+    "set_cjk_rcparams", "fix_log_labels", "apply_rcparams", "t", "LBL",
 ]
 
 # ------------------------------------------------------------------ #
@@ -72,11 +72,90 @@ _RC = {
 _MARKERS = ["o", "s", "^", "D", "v", "P", "*", "X", "<", ">"]
 _LINESTYLES = ["-", "--", "-.", ":"]
 
+# ------------------------------------------------------------------ #
+# 双语术语表（图面文字集中管理，供 t() 按语言取用）
+# ------------------------------------------------------------------ #
+#: 每个条目为 {"en": 英文, "zh": 中文}；英文为 SCI 图版默认，
+#: 中文供国内期刊/汇报。数学符号类标签（如 $\sigma$）语言无关，不入表。
+LBL = {
+    "depth":            {"en": "Depth (m)",                "zh": "深度 (m)"},
+    "frequency":        {"en": "Frequency (Hz)",           "zh": "频率 (Hz)"},
+    "spacing":          {"en": "Spacing (m)",              "zh": "收发距 (m)"},
+    "layered_model":    {"en": "Layered model",            "zh": "层状模型"},
+    "conductivity_model": {"en": "Conductivity model",     "zh": "电导率模型"},
+    "layer_discretization": {"en": "Layer discretization", "zh": "层状网格离散"},
+    "computational_mesh": {"en": "Computational mesh",     "zh": "计算网格"},
+    "response":         {"en": "Response",                 "zh": "响应"},
+    "true_model":       {"en": "True model",               "zh": "真实模型"},
+    "recovered_model":  {"en": "Recovered model",          "zh": "回收模型"},
+    "profile_recovery": {"en": "Profile recovery",         "zh": "剖面回收"},
+    "convergence":      {"en": "Convergence",              "zh": "收敛"},
+    "data_misfit":      {"en": r"$\phi_d$ (data misfit)",  "zh": r"$\phi_d$（数据拟合差）"},
+    "model_norm":       {"en": r"$\phi_m$ (model norm)",   "zh": r"$\phi_m$（模型范数）"},
+    "iteration":        {"en": "Iteration",                "zh": "迭代次数"},
+    "objective":        {"en": "Objective",                "zh": "目标函数值"},
+    "air":              {"en": "air",                      "zh": "空气"},
+    "true":             {"en": "true",                     "zh": "真实"},
+    "recovered":        {"en": "recovered",                "zh": "回收"},
+    "analytic":         {"en": "analytic",                 "zh": "解析解"},
+    "half_space":       {"en": "(half-space)",             "zh": "（半空间）"},
+    "layer":            {"en": "layer",                    "zh": "层"},
+    "cell":             {"en": "cell",                     "zh": "单元"},
+    "baseline":         {"en": "baseline",                 "zh": "基线"},
+}
+
+
+def t(key: str, lang: str = "en") -> str:
+    """按语言取图面文字。
+
+    Args:
+        key: `LBL` 中的键。
+        lang: 'en'（默认，SCI）或 'zh'。
+
+    Returns:
+        对应语言的标签字符串；未知键则回退为 key 本身。
+    """
+    entry = LBL.get(key)
+    if entry is None:
+        return key
+    return entry.get(lang, entry["en"])
+
+
+# 语言相关的字体配置（叠加在出版级 _RC 之上）
+_RC_LANG = {
+    "en": {},  # _RC 已为 serif/Times，适配英文 SCI
+    "zh": {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["SimHei", "Microsoft YaHei", "DejaVu Sans"],
+        "axes.unicode_minus": False,
+    },
+}
+
+
+def apply_rcparams(lang: str = "en") -> None:
+    """按语言设置全局字体（幂等），供手绘脚本顶部调用。
+
+    Args:
+        lang: 'en' 用 serif/Times（SCI 默认）；'zh' 用 SimHei 正文 + stix 数学。
+    """
+    if lang == "zh":
+        matplotlib.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
+        matplotlib.rcParams["axes.unicode_minus"] = False
+    else:
+        matplotlib.rcParams["font.family"] = "serif"
+        matplotlib.rcParams["font.serif"] = ["Times New Roman", "DejaVu Serif"]
+    matplotlib.rcParams["mathtext.fontset"] = "stix"
+
 
 @contextlib.contextmanager
-def pub_style(**overrides):
-    """套用出版级 rcParams 的上下文管理器（退出时还原）。"""
-    rc = {**_RC, **overrides}
+def pub_style(lang: str = "en", **overrides):
+    """套用出版级 rcParams 的上下文管理器（退出时还原）。
+
+    Args:
+        lang: 'en'（默认，英文 SCI）或 'zh'（中文标注，数学仍用 stix）。
+        overrides: 额外覆盖的 rcParams。
+    """
+    rc = {**_RC, **_RC_LANG.get(lang, {}), **overrides}
     old = {k: matplotlib.rcParams[k] for k in rc}
     matplotlib.rcParams.update(rc)
     try:
@@ -195,27 +274,27 @@ def _add_cbar(fig, im, label):
 # 单面板：模型
 # ------------------------------------------------------------------ #
 def plot_model(fwd, sigma, ax=None, labels=None, panel=None,
-               show_title=True, cmap="viridis", colorbar=True):
+               show_title=True, cmap="viridis", colorbar=True, lang="en"):
     """电导率模型：1D 层状示意 / 2D r-z / 3D x-z 剖面（log10 σ）。"""
     sigma = np.asarray(sigma, dtype=float)
     own = ax is None
     if own:
         _, ax = plt.subplots(figsize=(3.6, 3.6))
     if fwd.geometry == "1d":
-        _draw_1d_model(fwd, sigma, ax, labels)
+        _draw_1d_model(fwd, sigma, ax, labels, lang=lang)
         if show_title:
-            _panel_title(ax, "Layered model", panel)
+            _panel_title(ax, t("layered_model", lang), panel)
         return ax
     im = _section(fwd, _log_sigma(sigma), ax, grid=False, cmap=cmap)
     if show_title:
-        _panel_title(ax, "Conductivity model", panel)
+        _panel_title(ax, t("conductivity_model", lang), panel)
     ax.set_aspect("equal", adjustable="box")
     if colorbar:
         _add_cbar(ax.figure, im, r"$\log_{10}\,\sigma$  (S/m)")
     return ax
 
 
-def _draw_1d_model(fwd, sigma, ax, labels=None):
+def _draw_1d_model(fwd, sigma, ax, labels=None, lang="en"):
     th = np.asarray(fwd.layer_thicknesses, dtype=float)
     n = len(sigma)
     ls = _log_sigma(sigma)
@@ -224,7 +303,7 @@ def _draw_1d_model(fwd, sigma, ax, labels=None):
 
     ax.add_patch(Rectangle((0, z_air), 1.0, -z_air,
                            facecolor=(0.86, 0.95, 1.0), edgecolor="none", zorder=0))
-    ax.text(0.82, z_air / 2, "air", ha="center", va="center",
+    ax.text(0.82, z_air / 2, t("air", lang), ha="center", va="center",
             fontsize=8, style="italic", color="steelblue", zorder=3)
     ax.axhline(0, color="k", lw=1.0, zorder=2)
 
@@ -235,7 +314,8 @@ def _draw_1d_model(fwd, sigma, ax, labels=None):
         ax.add_patch(Rectangle((0, depth), 1.0, h, facecolor=plt.cm.viridis(norm[i]),
                                edgecolor="k", lw=0.6, alpha=0.92, zorder=1))
         name = labels[i] if labels and i < len(labels) else (
-            "baseline" if inf else f"layer {i+1}")
+            t("baseline", lang) if inf
+            else f"{t('layer', lang)} {i+1}")
         ax.text(0.62, depth + h / 2,
                 rf"$\sigma_{i+1}={sigma[i]:.3g}$ S/m" "\n"
                 rf"$\rho_{i+1}={1.0/sigma[i]:.3g}$" r" $\Omega$m" "\n"
@@ -269,14 +349,14 @@ def _draw_1d_model(fwd, sigma, ax, labels=None):
     ax.set_xlim(-0.55, 1.45)
     ax.set_ylim(depth, z_air)          # 深度向下
     ax.set_xticks([])
-    ax.set_ylabel("Depth (m)")
+    ax.set_ylabel(t("depth", lang))
 
 
 # ------------------------------------------------------------------ #
 # 单面板：网格
 # ------------------------------------------------------------------ #
 def plot_mesh(fwd, sigma=None, ax=None, panel=None, show_title=True,
-              mark_tool=True, cmap="viridis", colorbar=True):
+              mark_tool=True, cmap="viridis", colorbar=True, lang="en"):
     """计算网格：1D 分层界面 / 2D-3D 在 log10(σ) 剖面上叠加网格线。"""
     own = ax is None
     if own:
@@ -288,13 +368,14 @@ def plot_mesh(fwd, sigma=None, ax=None, panel=None, show_title=True,
             ax.add_patch(Rectangle((0, zb[i]), 1.0, zb[i + 1] - zb[i],
                                    facecolor="none", edgecolor="k", lw=0.8))
             ax.text(0.5, 0.5 * (zb[i] + zb[i + 1]),
-                    f"cell {i+1}" + ("" if i < len(th) else " (half-space)"),
+                    f"{t('cell', lang)} {i+1}"
+                    + ("" if i < len(th) else " " + t("half_space", lang)),
                     ha="center", va="center", fontsize=7.2)
         ax.set_xlim(0, 1); ax.set_xticks([])
         ax.set_ylim(zb[-1], 0)
-        ax.set_ylabel("Depth (m)")
+        ax.set_ylabel(t("depth", lang))
         if show_title:
-            _panel_title(ax, "Layer discretization", panel)
+            _panel_title(ax, t("layer_discretization", lang), panel)
         return ax
 
     vals = _log_sigma(sigma) if sigma is not None else np.zeros(fwd.mesh.n_cells)
@@ -303,7 +384,7 @@ def plot_mesh(fwd, sigma=None, ax=None, panel=None, show_title=True,
     if mark_tool:
         _mark_tool(ax, *_tool_positions(fwd))
     if show_title:
-        _panel_title(ax, "Computational mesh", panel)
+        _panel_title(ax, t("computational_mesh", lang), panel)
     if colorbar:
         _add_cbar(ax.figure, im, r"$\log_{10}\,\sigma$  (S/m)")
     return ax
@@ -312,7 +393,8 @@ def plot_mesh(fwd, sigma=None, ax=None, panel=None, show_title=True,
 # ------------------------------------------------------------------ #
 # 单面板：响应
 # ------------------------------------------------------------------ #
-def plot_response(fwd, d, ax=None, panel=None, show_title=True, analytic=None):
+def plot_response(fwd, d, ax=None, panel=None, show_title=True, analytic=None,
+                  lang="en"):
     """响应曲线：1D 为 log-log |d|-频率；2D/3D 为 |d|-收发距。"""
     own = ax is None
     if own:
@@ -330,12 +412,12 @@ def plot_response(fwd, d, ax=None, panel=None, show_title=True, analytic=None):
                           ls=_LINESTYLES[idx % len(_LINESTYLES)],
                           ms=4.5, label=f"{c}, $s$={s:g} m")
                 idx += 1
-        ax.set(xlabel=r"Frequency $f$ (Hz)", ylabel=r"$|H_z^{\mathrm{s}}|$ (A/m)")
+        ax.set(xlabel=t("frequency", lang), ylabel=r"$|H_z^{\mathrm{s}}|$ (A/m)")
         if analytic is not None:
             an = np.abs(np.asarray(analytic))
             ax.loglog(freqs, an.reshape(-1)[::max(1, an.size // len(freqs))]
                       if an.size > len(freqs) else an, "k:", lw=1.2,
-                      label="analytic")
+                      label=t("analytic", lang))
     else:
         for i, f in enumerate(freqs):
             for k, c in enumerate(comps):
@@ -344,12 +426,12 @@ def plot_response(fwd, d, ax=None, panel=None, show_title=True, analytic=None):
                             ls=_LINESTYLES[idx % len(_LINESTYLES)],
                             ms=4.5, label=f"{c}, $f$={f:g} Hz")
                 idx += 1
-        ax.set(xlabel=r"Spacing $s$ (m)", ylabel=r"$|d|$ (A/m)")
+        ax.set(xlabel=t("spacing", lang), ylabel=r"$|d|$ (A/m)")
 
     ax.grid(True, which="major")
     ax.legend(loc="best", ncol=2 if idx > 4 else 1)
     if show_title:
-        _panel_title(ax, "Response", panel)
+        _panel_title(ax, t("response", lang), panel)
     return ax
 
 
@@ -357,29 +439,31 @@ def plot_response(fwd, d, ax=None, panel=None, show_title=True, analytic=None):
 # 合成图版
 # ------------------------------------------------------------------ #
 def plot_forward_figure(fwd, sigma, d=None, out_dir=".", prefix="fwd_plate",
-                        dpi=300, labels=None, analytic=None):
+                        dpi=300, labels=None, analytic=None, lang="en"):
     """将模型/网格/响应合成为一张 SCI 多联图版并保存，返回文件路径。"""
     sigma = np.asarray(sigma, dtype=float)
     d = fwd.dpred(sigma) if d is None else np.asarray(d)
     out = pathlib.Path(out_dir); out.mkdir(parents=True, exist_ok=True)
 
-    with pub_style():
+    with pub_style(lang=lang):
         if fwd.geometry == "1d":
             fig = plt.figure(figsize=(7.2, 3.6))
             gs = GridSpec(1, 2, width_ratios=[1.0, 1.35], wspace=0.26,
                           figure=fig)
             plot_model(fwd, sigma, ax=fig.add_subplot(gs[0, 0]),
-                       labels=labels, panel="a")
+                       labels=labels, panel="a", lang=lang)
             plot_response(fwd, d, ax=fig.add_subplot(gs[0, 1]), panel="b",
-                          analytic=analytic)
+                          analytic=analytic, lang=lang)
         else:
             fig = plt.figure(figsize=(10.8, 3.7))
             gs = GridSpec(1, 3, width_ratios=[1.0, 1.0, 1.2], wspace=0.28,
                           figure=fig)
-            plot_model(fwd, sigma, ax=fig.add_subplot(gs[0, 0]), panel="a")
+            plot_model(fwd, sigma, ax=fig.add_subplot(gs[0, 0]), panel="a",
+                       lang=lang)
             plot_mesh(fwd, sigma=sigma, ax=fig.add_subplot(gs[0, 1]),
-                      panel="b", colorbar=False)
-            plot_response(fwd, d, ax=fig.add_subplot(gs[0, 2]), panel="c")
+                      panel="b", colorbar=False, lang=lang)
+            plot_response(fwd, d, ax=fig.add_subplot(gs[0, 2]), panel="c",
+                          lang=lang)
 
         path = out / f"{prefix}.png"
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -388,17 +472,18 @@ def plot_forward_figure(fwd, sigma, d=None, out_dir=".", prefix="fwd_plate",
 
 
 def plot_inversion_figure(fwd, rec_sigma, history, sigma_true=None,
-                          out_dir=".", prefix="inv_plate", dpi=300):
+                          out_dir=".", prefix="inv_plate", dpi=300, lang="en"):
     """反演图版：1D 剖面回收 + 收敛史；2D/3D 真实/回收剖面 + 收敛史。"""
     rec_sigma = np.asarray(rec_sigma, dtype=float)
     out = pathlib.Path(out_dir); out.mkdir(parents=True, exist_ok=True)
 
-    with pub_style():
+    with pub_style(lang=lang):
         if fwd.geometry == "1d":
             fig = plt.figure(figsize=(7.2, 3.6))
             gs = GridSpec(1, 2, width_ratios=[1.0, 1.15], wspace=0.28, figure=fig)
-            _profile_1d(fwd, rec_sigma, sigma_true, fig.add_subplot(gs[0, 0]), "a")
-            _convergence(history, fig.add_subplot(gs[0, 1]), "b")
+            _profile_1d(fwd, rec_sigma, sigma_true, fig.add_subplot(gs[0, 0]),
+                        "a", lang=lang)
+            _convergence(history, fig.add_subplot(gs[0, 1]), "b", lang=lang)
         else:
             fig = plt.figure(figsize=(10.8, 3.7))
             gs = GridSpec(1, 3, width_ratios=[1.0, 1.0, 1.0], wspace=0.3,
@@ -406,13 +491,13 @@ def plot_inversion_figure(fwd, rec_sigma, history, sigma_true=None,
             if sigma_true is not None:
                 im_t = _section(fwd, _log_sigma(sigma_true),
                                 fig.add_subplot(gs[0, 0]), grid=False)
-                _panel_title(fig.axes[-1], "True model", "a")
+                _panel_title(fig.axes[-1], t("true_model", lang), "a")
                 _add_cbar(fig, im_t, r"$\log_{10}\,\sigma$  (S/m)")
             im_r = _section(fwd, _log_sigma(rec_sigma),
                             fig.add_subplot(gs[0, 1]), grid=False)
-            _panel_title(fig.axes[-1], "Recovered model", "b")
+            _panel_title(fig.axes[-1], t("recovered_model", lang), "b")
             _add_cbar(fig, im_r, r"$\log_{10}\,\sigma$  (S/m)")
-            _convergence(history, fig.add_subplot(gs[0, 2]), "c")
+            _convergence(history, fig.add_subplot(gs[0, 2]), "c", lang=lang)
 
         path = out / f"{prefix}.png"
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -420,7 +505,7 @@ def plot_inversion_figure(fwd, rec_sigma, history, sigma_true=None,
     return str(path)
 
 
-def _profile_1d(fwd, rec, true, ax, panel=None):
+def _profile_1d(fwd, rec, true, ax, panel=None, lang="en"):
     th = np.asarray(fwd.layer_thicknesses, dtype=float)
     n = len(rec)
     bounds = np.r_[0.0, np.cumsum(th)]
@@ -428,44 +513,46 @@ def _profile_1d(fwd, rec, true, ax, panel=None):
                         else bounds[-1] + 0.5 * th[-1] for i in range(n)])
     if true is not None:
         ax.step(np.asarray(true, float), centers, where="mid", color="k",
-                ls="--", lw=1.6, label="true")
+                ls="--", lw=1.6, label=t("true", lang))
     ax.step(rec, centers, where="mid", color="C0", lw=2.0, marker="o",
-            ms=4, label="recovered")
+            ms=4, label=t("recovered", lang))
     ax.set_xscale("log")
-    ax.set(xlabel=r"$\sigma$ (S/m)", ylabel="Depth (m)")
+    ax.set(xlabel=r"$\sigma$ (S/m)", ylabel=t("depth", lang))
     ax.invert_yaxis()
     ax.legend(loc="best")
-    _panel_title(ax, "Profile recovery", panel)
+    _panel_title(ax, t("profile_recovery", lang), panel)
 
 
-def _convergence(history, ax, panel=None):
+def _convergence(history, ax, panel=None, lang="en"):
     it = history["iterations"]
     x = list(range(1, len(it) + 1))
     ax.semilogy(x, [d["phi_d"] for d in it], "o-", ms=4,
-                label=r"$\phi_d$ (data misfit)")
+                label=t("data_misfit", lang))
     ax.semilogy(x, [d["phi_m"] for d in it], "s-", ms=4,
-                label=r"$\phi_m$ (model norm)")
-    ax.set(xlabel="Iteration", ylabel="Objective")
+                label=t("model_norm", lang))
+    ax.set(xlabel=t("iteration", lang), ylabel=t("objective", lang))
     ax.grid(True, which="both")
     ax.legend(loc="best")
-    _panel_title(ax, "Convergence", panel)
+    _panel_title(ax, t("convergence", lang), panel)
 
 
 # ------------------------------------------------------------------ #
 # 三张单图（向后兼容）
 # ------------------------------------------------------------------ #
 def plot_forward_views(fwd, sigma, d=None, out_dir=".", prefix="fwd",
-                       dpi=300, labels=None, analytic=None):
+                       dpi=300, labels=None, analytic=None, lang="en"):
     """分别输出 model / mesh / response 三张单图，返回 fig 与路径字典。"""
     sigma = np.asarray(sigma, dtype=float)
     d = fwd.dpred(sigma) if d is None else np.asarray(d)
     out = pathlib.Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     figs, paths = {}, {}
-    with pub_style():
+    with pub_style(lang=lang):
         for key, fn in (
-            ("model", lambda a: plot_model(fwd, sigma, ax=a, labels=labels)),
-            ("mesh", lambda a: plot_mesh(fwd, sigma=sigma, ax=a)),
-            ("response", lambda a: plot_response(fwd, d, ax=a, analytic=analytic)),
+            ("model", lambda a: plot_model(fwd, sigma, ax=a, labels=labels,
+                                           lang=lang)),
+            ("mesh", lambda a: plot_mesh(fwd, sigma=sigma, ax=a, lang=lang)),
+            ("response", lambda a: plot_response(fwd, d, ax=a, analytic=analytic,
+                                                 lang=lang)),
         ):
             fig, ax = plt.subplots(figsize=(4.2, 3.6))
             fn(ax)

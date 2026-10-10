@@ -32,6 +32,9 @@ from .plotting import (
     pub_style,
     set_cjk_rcparams,
     fix_log_labels,
+    apply_rcparams,
+    t,
+    LBL,
 )
 from .survey import LWDToolConfig, build_receivers, build_survey, data_order
 
@@ -60,4 +63,7 @@ __all__ = [
     "pub_style",
     "set_cjk_rcparams",
     "fix_log_labels",
+    "apply_rcparams",
+    "t",
+    "LBL",
 ]

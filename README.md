@@ -16,15 +16,16 @@
 
 ## **📦 安装指南**
 ### **🔹 依赖环境**
-本项目基于 **Python 3.8+**，推荐使用 **Anaconda** 进行环境管理。  
+本项目基于 **Python 3.10+**（开发验证于 3.13），推荐使用 **Anaconda** 进行环境管理。
+频域电磁 FVM 正反演（`src/fdemcore` + `src/lwd_fdem`）依赖 **discretize / pymatsolver / geoana / libdlf**，但**不依赖 pip 安装的 SimPEG**（SimPEG 相关算法已按精简方案内置）。
 
 ```bash
 # 创建新的 Python 环境
-conda create -n lwd-eminv python=3.8
+conda create -n lwd-eminv python=3.13
 conda activate lwd-eminv
 
 # 安装依赖库
-pip install numpy scipy matplotlib tqdm
+pip install -r requirements.txt
 pip install torch  # 如使用深度学习
 ```
 
@@ -38,31 +39,73 @@ python setup.py install
 ---
 
 ## **🚀 快速开始**
-### **🔹 1. 运行示例**
+### **🔹 1. 频域电磁正演（1D 层状，多频多偏移距）**
 ```python
-from lwd_eminv import LWDInversion
+import numpy as np
+from src.lwd_fdem import LWDFDEMForward, LWDToolConfig
 
-# 初始化反演
-inv = LWDInversion(method="Occam", max_iter=100)
-
-# 加载测井数据
-data = inv.load_data("example_data.csv")
-
-# 运行反演
-result = inv.run_inversion(data)
-
-# 可视化结果
-inv.plot_result(result)
+# 定义仪器：4 频率 × 3 收发距，记录 Hz 二次场实/虚部
+tool = LWDToolConfig(
+    frequencies=(1e4, 1e5, 5e5, 1e6),
+    spacings=np.array([0.3, 0.6, 1.0]),
+    components=("real", "imag"),
+    field_kind="h", secondary=True, receiver_geometry="radial",
+)
+# 三层地电模型（2 m / 4 m 层 + 半空间）
+fwd = LWDFDEMForward("1d", tool, layer_thicknesses=np.array([2.0, 4.0]))
+d = fwd.dpred(np.array([0.25, 0.01, 0.5]))   # (nD,) 响应
+print(fwd.to_matrix(d).shape)                 # (n_freq, n_spacing, n_comp)
 ```
 
-### **🔹 2. 命令行运行**
+### **🔹 2. Occam 风格反演（合成数据回收）**
+```python
+from src.lwd_fdem import add_synthetic_noise, make_data_object, LWDFDEMInversion
+
+dobs, std = add_synthetic_noise(d, noise_level=0.02, seed=1)
+data = make_data_object(fwd.survey, dobs, absolute_std=std)
+inv = LWDFDEMInversion(fwd, data, m0=np.log(0.1 * np.ones(3)), max_iter=15)
+sigma_recovered, history = inv.run()
+```
+
+2D 轴对称与 3D 几何同样支持：`LWDFDEMForward("2d_cyl", tool, mesh=...)` /
+`("3d", tool, mesh=...)`，网格由 `build_2d_cyl_mesh` / `build_3d_tensor_mesh`
+生成并自带趋肤深度校核。完整脚本见 `examples/lwd_fdem_*.py`。
+
+### **🔹 3. 运行示例与测试**
 ```bash
-python run_inversion.py --method Occam --data example_data.csv
+# 端到端示例（生成 figures 到 examples/figs/）
+python examples/lwd_fdem_forward_1d.py
+python examples/lwd_fdem_inversion_1d.py
+
+# 验证套件（解析对标 / 2D-3D 交叉 / 梯度校验 / 反演回收）
+pytest -m "not slow"      # 快速回归
+pytest                    # 含 3D 反演等耗时用例
 ```
 
 ---
 
 ## **📊 结果示例**
+
+### **🔹 正演结果三件套（模型图 / 网格图 / 响应图）**
+每个正演示例（`lwd_fdem_forward_{1d,2d,3d}.py`）运行后除对比图外，还会输出
+`{prefix}_model.png`、`{prefix}_mesh.png`、`{prefix}_response.png` 三张判据图，
+绘制风格对齐 `external/SimPEG-src/fdem_forward_validation`：
+- **模型图**：1D 为层状示意（空气层+地表+按 σ 着色层块+σ/ρ/层名+层厚 h+井眼+Tx/Rx 线圈），2D/3D 为 log10(σ) 剖面
+- **网格图**：1D 分层界面；2D/3D 在 log10(σ) 剖面上叠加网格线（core+padding 疏密）并标注收发线圈
+- **响应图**：1D 为 loglog |响应|-频率 频散曲线（可叠加解析解），2D/3D 为 |响应|-收发距
+```python
+from src.lwd_fdem import plot_forward_views   # 或 fwd.plot_views(...)
+
+# 一次性绘制并保存三类图到 examples/figs/
+views = fwd.plot_views(sigma, d, out_dir="examples/figs",
+                       prefix="lwd_fdem_forward_2d",
+                       labels=("上覆层", "高阻层", "半空间"))  # 1D 层名可选
+print(views["paths"])   # {'model':..., 'mesh':..., 'response':...}
+
+# 也可单独取用某一类，绑定到自定义 Axes
+from src.lwd_fdem import plot_model, plot_mesh
+plot_mesh(fwd, sigma=sigma)   # 网格图（log10 σ + 网格叠加）
+```
 
 ### **🔹 反演结果可视化**
 ```python
@@ -93,16 +136,23 @@ inv.plot_sensitivity(sensitivity)
 ## **🛠 目录结构**
 ```
 LWD-EM-Inv/
-│── docs/                # 文档与示例
-│── examples/            # 示例代码
-│── src/                 # 核心代码
-│   ├── lwd_eminv/       # 反演模块
-│   ├── forward/         # 正演模块
-│   ├── utils/           # 工具库
-│── tests/               # 测试代码
-│── run_inversion.py     # 反演主脚本
-│── README.md            # 项目说明
-│── setup.py             # 安装脚本
+│── docs/                     # 文档（编码规范、架构说明）
+│   ├── CODING_STANDARDS.md   # 编码规范
+│   └── ARCHITECTURE.md       # SimPEG 架构拆解与模块映射
+│── examples/                 # 示例代码（LWD FDEM 正反演等）
+│── src/                      # 核心代码
+│   ├── forward/              # 解析法正演模块（1D/2D）
+│   ├── inversion/            # 自研反演模块（Occam 2D）
+│   ├── model/                # 地层模型与网格工具
+│   ├── fdemcore/             # 频域电磁 FVM 计算核心（SimPEG 精简派生，MIT）
+│   └── lwd_fdem/             # LWD 频域电磁波正反演业务层
+│── tests/                    # 测试代码（解析对标/交叉验证/梯度校验/反演回收）
+│── external/SimPEG-src/      # SimPEG 上游源码存档（vendor 来源，不参与打包）
+│── CONTRIBUTING.md           # 贡献指南
+│── THIRD_PARTY_LICENSES.md   # 第三方许可证声明
+│── README.md                 # 项目说明
+│── setup.py                  # 安装脚本
+│── requirements.txt          # 依赖清单
 ```
 
 ---

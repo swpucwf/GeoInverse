@@ -34,6 +34,7 @@ from .plotting import (
     fix_log_labels,
     apply_rcparams,
     save_figure,
+    case_fig_dir,
     t,
     LBL,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "fix_log_labels",
     "apply_rcparams",
     "save_figure",
+    "case_fig_dir",
     "t",
     "LBL",
 ]

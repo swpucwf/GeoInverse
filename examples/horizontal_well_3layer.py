@@ -44,11 +44,11 @@ from src.lwd_fdem import (
     pub_style,
     apply_rcparams,
     save_figure,
+    case_fig_dir,
     skin_depth,
 )
 
-FIG_DIR = pathlib.Path(__file__).parent / "figs"
-FIG_DIR.mkdir(exist_ok=True)
+FIG_DIR = case_fig_dir(__file__)   # 按案例隔离输出到 figs/horizontal_well_3layer/
 
 
 # ================================================================ #

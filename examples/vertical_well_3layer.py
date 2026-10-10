@@ -46,11 +46,11 @@ from src.lwd_fdem import (
     mesh_quality_report,
     plot_inversion_figure,
     save_figure,
+    case_fig_dir,
     skin_depth,
 )
 
-FIG_DIR = pathlib.Path(__file__).parent / "figs"
-FIG_DIR.mkdir(exist_ok=True)
+FIG_DIR = case_fig_dir(__file__)   # 按案例隔离输出到 figs/vertical_well_3layer/
 
 
 # ================================================================ #

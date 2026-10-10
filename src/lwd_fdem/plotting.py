@@ -30,7 +30,8 @@ from .forward import LWDFDEMForward
 __all__ = [
     "pub_style", "plot_model", "plot_mesh", "plot_response",
     "plot_forward_figure", "plot_inversion_figure", "plot_forward_views",
-    "set_cjk_rcparams", "fix_log_labels", "apply_rcparams", "t", "LBL",
+    "set_cjk_rcparams", "fix_log_labels", "apply_rcparams", "save_figure",
+    "case_fig_dir", "t", "LBL",
 ]
 
 # ------------------------------------------------------------------ #
@@ -237,6 +238,27 @@ def save_figure(fig, path, *, close=True, dpi=300, bbox_inches="tight", **kw):
     if close:
         plt.close(fig)
     return str(p)
+
+
+def case_fig_dir(source_file, case=None, base="figs"):
+    """返回按案例隔离的图版输出目录（自动创建），避免多示例图片混放。
+
+    默认以调用脚本文件名（去扩展名）作为案例子目录名：
+    examples/foo.py -> examples/figs/foo/。
+
+    Args:
+        source_file: 通常传 `__file__`。
+        case: 自定义案例目录名；None 时用脚本文件名 stem。
+        base: 图版根目录名（相对脚本所在目录），默认 "figs"。
+
+    Returns:
+        pathlib.Path：已确保存在的案例图版输出目录。
+    """
+    src = pathlib.Path(source_file).resolve()
+    name = case or src.stem
+    out = src.parent / base / name
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 # ------------------------------------------------------------------ #

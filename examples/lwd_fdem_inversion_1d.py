@@ -26,13 +26,13 @@ from src.lwd_fdem import (
     LWDFDEMForward, LWDFDEMInversion, LWDToolConfig,
     add_synthetic_noise, build_1d_mesh, make_data_object,
     set_cjk_rcparams,
+    case_fig_dir,
 )
 
 # 中文字体 + 数学负号统一配置（复用项目级公共工具）
 set_cjk_rcparams()
 
-FIG_DIR = pathlib.Path(__file__).parent / "figs"
-FIG_DIR.mkdir(exist_ok=True)
+FIG_DIR = case_fig_dir(__file__)   # 按案例隔离输出到 figs/lwd_fdem_inversion_1d/
 
 
 def main():

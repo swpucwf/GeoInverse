@@ -10,3 +10,15 @@
 
 # 忽略CSV文件
 *.csv
+
+# Python 字节码与打包产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 上游 SimPEG 源码存档（本地参考/抽取源，不入库）
+external/
+
+# 示例运行生成的图件（可由 examples 重新生成）
+examples/figs/

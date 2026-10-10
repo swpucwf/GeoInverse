@@ -37,13 +37,13 @@ from src.lwd_fdem import (
     LWDToolConfig,
     add_synthetic_noise,
     build_1d_mesh,
-    fix_log_labels,
     make_data_object,
     mesh_quality_report,
     plot_forward_figure,
     plot_inversion_figure,
     pub_style,
     apply_rcparams,
+    save_figure,
     skin_depth,
 )
 
@@ -685,11 +685,8 @@ def fig_07_convergence(history, dobs, fwd):
 # ================================================================ #
 
 def _save(fig, filename: str, dpi: int = 200):
-    # 对数轴负号修复：复用项目级公共工具 src.lwd_fdem.fix_log_labels
-    fix_log_labels(fig)
-    out = FIG_DIR / filename
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+    # 统一走项目级公共保存出口 save_figure（内部已自动 fix_log_labels）
+    out = save_figure(fig, FIG_DIR / filename, dpi=dpi)
     print(f"  [保存] {out}")
 
 

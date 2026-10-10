@@ -33,6 +33,7 @@ from .plotting import (
     set_cjk_rcparams,
     fix_log_labels,
     apply_rcparams,
+    save_figure,
     t,
     LBL,
 )
@@ -64,6 +65,7 @@ __all__ = [
     "set_cjk_rcparams",
     "fix_log_labels",
     "apply_rcparams",
+    "save_figure",
     "t",
     "LBL",
 ]

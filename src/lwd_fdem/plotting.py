@@ -168,17 +168,11 @@ def pub_style(lang: str = "en", **overrides):
 # 通用样式工具（供所有 example/脚本复用）
 # ------------------------------------------------------------------ #
 def set_cjk_rcparams() -> None:
-    """配置中文字体与数学负号，供所有脚本统一调用（幂等）。
+    """配置中文字体与数学负号（向后兼容别名，等价 `apply_rcparams("zh")`）。
 
-    背景：将 `font.sans-serif` 设为 SimHei 后，普通文本可正常显示中文，
-    但 SimHei 缺少数学负号字形 U+2212；且 `axes.unicode_minus=False` 仅对
-    普通文本生效，管不到 mathtext（对数轴刻度、公式标签）。本函数将
-    mathtext 字体集固定为 stix（自带负号字形），从源头缓解缺字问题；
-    对数轴刻度的残留问题再配合 `fix_log_labels()` 彻底解决。
+    .. deprecated:: 新代码请直接用 `apply_rcparams(lang)`（lang="zh"）。
     """
-    matplotlib.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
-    matplotlib.rcParams["axes.unicode_minus"] = False
-    matplotlib.rcParams["mathtext.fontset"] = "stix"
+    apply_rcparams("zh")
 
 
 def fix_log_labels(fig):
@@ -216,6 +210,33 @@ def fix_log_labels(fig):
         if ax.get_yscale() == "log":
             ax.yaxis.set_major_formatter(formatter)
     return fig
+
+
+def save_figure(fig, path, *, close=True, dpi=300, bbox_inches="tight", **kw):
+    """统一图版保存出口（通用设施）：自动修复对数轴负号 + 规范 dpi/bbox。
+
+    所有绘图（内置函数与外部脚本）都应经此保存，以确保 `fix_log_labels`
+    不被遗漏，避免各脚本各自实现 `_save` 而重复踩“对数轴负号缺字”的坑。
+
+    Args:
+        fig: matplotlib Figure 对象。
+        path: 输出文件路径（父目录自动创建）。
+        close: 保存后是否 `plt.close(fig)`；需保留 fig 对象时传 False。
+        dpi: 分辨率。
+        bbox_inches: 传给 savefig 的边框设置。
+        **kw: 其余 savefig 关键字参数。
+
+    Returns:
+        实际保存的文件路径字符串。
+    """
+    fix_log_labels(fig)
+    p = pathlib.Path(path)
+    if str(p.parent) not in ("", "."):
+        p.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(p, dpi=dpi, bbox_inches=bbox_inches, **kw)
+    if close:
+        plt.close(fig)
+    return str(p)
 
 
 # ------------------------------------------------------------------ #
@@ -465,10 +486,8 @@ def plot_forward_figure(fwd, sigma, d=None, out_dir=".", prefix="fwd_plate",
             plot_response(fwd, d, ax=fig.add_subplot(gs[0, 2]), panel="c",
                           lang=lang)
 
-        path = out / f"{prefix}.png"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-    return str(path)
+        path = save_figure(fig, out / f"{prefix}.png", dpi=dpi)
+    return path
 
 
 def plot_inversion_figure(fwd, rec_sigma, history, sigma_true=None,
@@ -499,10 +518,8 @@ def plot_inversion_figure(fwd, rec_sigma, history, sigma_true=None,
             _add_cbar(fig, im_r, r"$\log_{10}\,\sigma$  (S/m)")
             _convergence(history, fig.add_subplot(gs[0, 2]), "c", lang=lang)
 
-        path = out / f"{prefix}.png"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-    return str(path)
+        path = save_figure(fig, out / f"{prefix}.png", dpi=dpi)
+    return path
 
 
 def _profile_1d(fwd, rec, true, ax, panel=None, lang="en"):
@@ -557,7 +574,7 @@ def plot_forward_views(fwd, sigma, d=None, out_dir=".", prefix="fwd",
             fig, ax = plt.subplots(figsize=(4.2, 3.6))
             fn(ax)
             fig.tight_layout()
-            p = out / f"{prefix}_{key}.png"
-            fig.savefig(p, dpi=dpi, bbox_inches="tight")
-            figs[key], paths[key] = fig, str(p)
+            saved = save_figure(fig, out / f"{prefix}_{key}.png", dpi=dpi,
+                                close=False)
+            figs[key], paths[key] = fig, saved
     return {**figs, "paths": paths}

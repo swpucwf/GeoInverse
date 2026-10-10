@@ -12,7 +12,7 @@
 ## 2. 类型标注与文档字符串
 
 - 所有公开函数、方法、类属性必须有完整类型标注（`typing` 或 PEP 604 联合写法）。
-- docstring 使用中文 Google 风格（与现有 `src/forward`、`src/inversion` 模块一致）：
+- docstring 使用中文 Google 风格（与 `src/lwd_fdem` 业务层模块一致）：
 
 ```python
 def build_survey(frequencies: list[float], spacings: np.ndarray) -> Survey:

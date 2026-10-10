@@ -162,7 +162,7 @@ class LWDFDEMForward:
                                      np.asarray(v, dtype=float))
 
     # ------------------------------------------------------------------ #
-    # 数据整形与绘图（API 风格对齐 src.forward.ForwardSolver）
+    # 数据整形与绘图
     # ------------------------------------------------------------------ #
     def to_matrix(self, d: np.ndarray) -> np.ndarray:
         """将数据向量整形为 (n_freq, n_spacing, n_comp) 数组。"""

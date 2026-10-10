@@ -116,10 +116,7 @@ plot_inversion_figure(fwd, rec_sigma, history, sigma_true=sigma_true,
 LWD-EM-Inv/
 ├── src/
 │   ├── fdemcore/          频域电磁 FVM 计算核心（SimPEG 精简派生，MIT）
-│   ├── lwd_fdem/          LWD 正反演业务层（survey/meshes/forward/inversion/plotting）
-│   ├── forward/           解析法正演模块（1D/2D）
-│   ├── inversion/         反演模块（Occam 2D）
-│   └── model/             地层模型与网格工具
+│   └── lwd_fdem/          LWD 正反演业务层（survey/meshes/forward/inversion/plotting）
 ├── examples/              正反演示例脚本
 ├── tests/                 测试（解析对标、交叉验证、梯度校验、反演回收）
 ├── docs/                  架构说明、编码规范、项目知识库

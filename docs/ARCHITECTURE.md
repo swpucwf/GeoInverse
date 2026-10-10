@@ -75,12 +75,14 @@ FVM 离散（以 e-form 为例）：`C = curl 矩阵`，`M_sigma^-1` 为面质�
 B2 = e-form（默认）/ b-form（轴对称交叉验证用）；F1 = 自然边界 + padding；
 F3 = 小规模直接法（SuperLU），大规模迭代 BiCGStab + 对角预条件。
 
-## 4. 与既有模块的关系
+## 4. 验收判据
 
-- `src/forward`（一维解析）、`src/forward_2d`、`src/inversion`（自研 Occam 2D）保持原样，
-  作为项目的解析解/快速模型通道；`fdemcore` 是独立的数值（FVM/1D 解析）通道。
 - 验收判据（决策清单 I）见 `tests/`：1D 对标解析解、2D-3D 交叉验证、σ→0 一致性、
   `check_derivative` 梯度校验、合成数据反演回收。
+
+> 注：项目早期自研的解析法正演/反演子系统（`src/forward`、`src/model`、
+> `src/visualization`、`src/inversion`）及其示例已下线，正反演统一由
+> `fdemcore`（计算核心）+ `lwd_fdem`（业务层）承担。
 
 ## 5. 依赖边界
 

@@ -60,27 +60,12 @@ def main():
     print("回收 sigma :", np.round(rec_sigma, 4))
     print("相对误差   :", np.round(np.abs(rec_sigma - true_sigma) / true_sigma, 4))
 
-    # ---- 3) 绘图：左阶梯剖面，右收敛史 ----
-    mesh1d = build_1d_mesh(thicknesses)
-    zc = np.asarray(mesh1d.cell_centers).reshape(-1)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.4))
-    ax1.step(rec_sigma, zc, where="mid", color="C0", lw=2, label="反演")
-    ax1.step(true_sigma, zc, where="mid", color="k", ls="--", lw=1.5, label="真模型")
-    ax1.invert_yaxis()
-    ax1.set(xlabel="sigma (S/m)", ylabel="z (m)", title="1D 层状反演回收")
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-
-    it = history["iterations"]
-    ax2.semilogy(range(1, len(it) + 1), [x["phi_d"] for x in it], "o-", label="phi_d")
-    ax2.semilogy(range(1, len(it) + 1), [x["phi_m"] for x in it], "s-", label="phi_m")
-    ax2.set(xlabel="迭代", ylabel="目标函数", title="收敛史")
-    ax2.grid(True, which="both", alpha=0.3)
-    ax2.legend()
-    fig.tight_layout()
-    out = FIG_DIR / "lwd_fdem_inversion_1d.png"
-    fig.savefig(out, dpi=150)
-    print(f"图已保存: {out}")
+    # ---- 3) SCI 图版：剖面回收 + 收敛史 ----
+    from src.lwd_fdem import plot_inversion_figure
+    plate = plot_inversion_figure(
+        fwd, rec_sigma, history, sigma_true=true_sigma,
+        out_dir=FIG_DIR, prefix="lwd_fdem_inversion_1d")
+    print("图版:", plate)
 
 
 if __name__ == "__main__":

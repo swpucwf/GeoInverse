@@ -23,10 +23,13 @@ from .meshes import (
     skin_depth,
 )
 from .plotting import (
+    plot_forward_figure,
     plot_forward_views,
+    plot_inversion_figure,
     plot_mesh,
     plot_model,
     plot_response,
+    pub_style,
 )
 from .survey import LWDToolConfig, build_receivers, build_survey, data_order
 
@@ -50,4 +53,7 @@ __all__ = [
     "plot_mesh",
     "plot_response",
     "plot_forward_views",
+    "plot_forward_figure",
+    "plot_inversion_figure",
+    "pub_style",
 ]

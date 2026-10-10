@@ -95,11 +95,11 @@ def main():
     fig.savefig(out, dpi=150)
     print(f"图已保存: {out}")
 
-    # ---- 5) 模型图 / 网格图 / 响应图 三件套 ----
-    views = fwd.plot_views(sigma_model, d, out_dir=FIG_DIR,
-                           prefix="lwd_fdem_forward_1d",
-                           labels=("上覆层", "高阻层", "半空间"))
-    print("三件套图:", views["paths"])
+    # ---- 5) SCI 图版（模型 + 响应，多联合成）----
+    plate = fwd.plot_figure(sigma_model, d, out_dir=FIG_DIR,
+                            prefix="lwd_fdem_forward_1d_plate",
+                            labels=("overburden", "resistive", "baseline"))
+    print("图版:", plate)
 
 
 if __name__ == "__main__":

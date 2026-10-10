@@ -20,7 +20,8 @@ import numpy as np
 import pytest
 
 from src.lwd_fdem import (
-    LWDFDEMForward, LWDToolConfig, build_2d_cyl_mesh, plot_forward_views,
+    LWDFDEMForward, LWDToolConfig, build_2d_cyl_mesh,
+    plot_forward_views, plot_forward_figure,
 )
 
 
@@ -42,6 +43,29 @@ def test_plot_views_1d(tmp_path):
         assert out[key] is not None
     plt_mod = pytest.importorskip("matplotlib.pyplot")
     plt_mod.close("all")
+
+
+def test_forward_figure_1d(tmp_path):
+    fwd = LWDFDEMForward("1d", _cfg(field_kind="h", secondary=True,
+                                    receiver_geometry="radial"),
+                         layer_thicknesses=np.array([2.0, 4.0]))
+    sigma = np.array([0.25, 0.01, 0.5])
+    p = plot_forward_figure(fwd, sigma, out_dir=tmp_path, prefix="plate1d")
+    import pathlib
+    assert pathlib.Path(p).exists()
+    pytest.importorskip("matplotlib.pyplot").close("all")
+
+
+def test_forward_figure_2d_cyl(tmp_path):
+    mesh = build_2d_cyl_mesh(r_core=5.0, z_core=12.0, cell_size=1.5,
+                             n_pad=3, pad_factor=1.4)
+    fwd = LWDFDEMForward("2d_cyl", _cfg(field_kind="b", secondary=True,
+                                        receiver_geometry="axial"), mesh=mesh)
+    sigma = 0.1 * np.ones(mesh.n_cells)
+    p = fwd.plot_figure(sigma, out_dir=tmp_path, prefix="plate2d")
+    import pathlib
+    assert pathlib.Path(p).exists()
+    pytest.importorskip("matplotlib.pyplot").close("all")
 
 
 def test_plot_views_2d_cyl(tmp_path):

@@ -68,19 +68,12 @@ def main():
     print(f"环区均值 {rec_sigma[ring].mean():.3f} S/m, "
           f"背景均值 {rec_sigma[~ring].mean():.3f} S/m")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.4))
-    tri1 = ax1.tripcolor(cc[:, 0], cc[:, 2], sigma_true, cmap="viridis",
-                         shading="flat", vmin=sigma_bg, vmax=0.5)
-    fig.colorbar(tri1, ax=ax1, label="sigma (S/m)")
-    ax1.set(xlabel="r (m)", ylabel="z (m)", title="真实模型")
-    tri2 = ax2.tripcolor(cc[:, 0], cc[:, 2], rec_sigma, cmap="viridis",
-                         shading="flat", vmin=sigma_bg, vmax=0.5)
-    fig.colorbar(tri2, ax=ax2, label="sigma (S/m)")
-    ax2.set(xlabel="r (m)", ylabel="z (m)", title="反演回收")
-    fig.tight_layout()
-    out = FIG_DIR / "lwd_fdem_inversion_2d.png"
-    fig.savefig(out, dpi=150)
-    print(f"图已保存: {out}")
+    # ---- SCI 图版：真实/回收剖面 + 收敛史 ----
+    from src.lwd_fdem import plot_inversion_figure
+    plate = plot_inversion_figure(
+        fwd, rec_sigma, history, sigma_true=sigma_true,
+        out_dir=FIG_DIR, prefix="lwd_fdem_inversion_2d")
+    print("图版:", plate)
 
 
 if __name__ == "__main__":

@@ -99,11 +99,11 @@ def main():
     fig.savefig(out, dpi=150)
     print(f"图已保存: {out}")
 
-    # ---- 5) 模型图 / 网格图 / 响应图 三件套 ----
+    # ---- 5) SCI 图版（模型 + 网格 + 响应，多联合成）----
     d_blk_full = fwd.dpred(sigma_blk)
-    views = fwd.plot_views(sigma_blk, d_blk_full, out_dir=FIG_DIR,
-                           prefix="lwd_fdem_forward_3d")
-    print("三件套图:", views["paths"])
+    plate = fwd.plot_figure(sigma_blk, d_blk_full, out_dir=FIG_DIR,
+                            prefix="lwd_fdem_forward_3d_plate")
+    print("图版:", plate)
 
 
 if __name__ == "__main__":

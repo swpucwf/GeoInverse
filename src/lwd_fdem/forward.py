@@ -209,3 +209,16 @@ class LWDFDEMForward:
 
         return plot_forward_views(self, sigma, d=d, out_dir=out_dir,
                                   prefix=prefix, labels=labels, analytic=analytic)
+
+    def plot_figure(self, sigma: np.ndarray, d: Optional[np.ndarray] = None,
+                    out_dir=".", prefix: str = "fwd_plate", dpi: int = 300,
+                    labels=None, analytic=None) -> str:
+        """合成 SCI 多联图版（模型/网格/响应）并保存，返回文件路径。
+
+        见 plotting.plot_forward_figure。
+        """
+        from .plotting import plot_forward_figure
+
+        return plot_forward_figure(self, sigma, d=d, out_dir=out_dir,
+                                   prefix=prefix, dpi=dpi, labels=labels,
+                                   analytic=analytic)

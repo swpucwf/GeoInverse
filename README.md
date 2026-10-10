@@ -86,49 +86,48 @@ pytest                    # 含 3D 反演等耗时用例
 
 ## **📊 案例与示意图**
 
-> 以下图件均由 `examples/lwd_fdem_*.py` 生成；正演三件套（模型 / 网格 / 响应）
-> 绘制风格对齐 `external/SimPEG-src/fdem_forward_validation`。
+> 下列图版均由 `examples/lwd_fdem_*.py` 生成，采用 SCI 论文风格：衬线字体 +
+> LaTeX 物理记法、内向刻度、(a)(b)(c) 多联面板、300 dpi。绘制内容约定参考
+> `external/SimPEG-src/fdem_forward_validation`。
 
 ### **案例 1 · 1D 层状正演（4 频 × 3 收发距，径向 Hz 二次场）**
 三层地电模型（2 m / 4 m 层 + 半空间，σ = 0.25 / 0.01 / 0.5 S/m）。
+(a) 层状模型示意（含井眼与 Tx/Rx 线圈）；(b) \|H_z^s\|–频率 频散曲线。
 
-| 模型图（层状示意） | 网格图（分层界面） | 响应图（loglog 频散） |
-|:---:|:---:|:---:|
-| <img src="docs/images/lwd_fdem_forward_1d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_1d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_1d_response.png" width="250"> |
+![1D 正演图版](docs/images/lwd_fdem_forward_1d_plate.png)
 
 ### **案例 2 · 2D 轴对称正演（r-z，环状低阻异常）**
+(a) log10(σ) 模型剖面；(b) 计算网格（core+padding 疏密 + 收发线圈）；(c) \|d\|–收发距。
 
-| 模型图 log10(σ) | 网格图（core+padding 叠加网格） | 响应图（\|d\|-收发距） |
-|:---:|:---:|:---:|
-| <img src="docs/images/lwd_fdem_forward_2d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_2d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_2d_response.png" width="250"> |
+![2D 正演图版](docs/images/lwd_fdem_forward_2d_plate.png)
 
 ### **案例 3 · 3D 直角正演（y=0 切片，井旁方块导体）**
 
-| 模型图 log10(σ) | 网格图（core+padding 叠加网格） | 响应图（\|d\|-收发距） |
-|:---:|:---:|:---:|
-| <img src="docs/images/lwd_fdem_forward_3d_model.png" width="250"> | <img src="docs/images/lwd_fdem_forward_3d_mesh.png" width="250"> | <img src="docs/images/lwd_fdem_forward_3d_response.png" width="250"> |
+![3D 正演图版](docs/images/lwd_fdem_forward_3d_plate.png)
 
 ### **案例 4 · Occam 反演结果回收（合成数据）**
+1D 剖面回收 + 收敛史；2D 真实/回收模型 + 收敛史。
 
-| 1D 反演（数据拟合 + 恢复模型） | 2D 反演 |
-|:---:|:---:|
-| <img src="docs/images/lwd_fdem_inversion_1d.png" width="360"> | <img src="docs/images/lwd_fdem_inversion_2d.png" width="360"> |
+![1D 反演图版](docs/images/lwd_fdem_inversion_1d.png)
+![2D 反演图版](docs/images/lwd_fdem_inversion_2d.png)
 
-### **🔹 正演三件套绘图 API**
-每个正演示例运行后输出 `{prefix}_model.png`、`{prefix}_mesh.png`、
-`{prefix}_response.png` 三张判据图，可一键生成：
+### **🔹 图版绘制 API**
 ```python
-from src.lwd_fdem import plot_forward_views   # 或 fwd.plot_views(...)
+from src.lwd_fdem import plot_forward_figure, plot_inversion_figure, pub_style
 
-# 一次性绘制并保存三类图（out_dir 建议 examples/figs）
-views = fwd.plot_views(sigma, d, out_dir="examples/figs",
-                       prefix="lwd_fdem_forward_2d",
-                       labels=("上覆层", "高阻层", "半空间"))  # 1D 层名可选
-print(views["paths"])   # {'model':..., 'mesh':..., 'response':...}
+# 正演：模型/网格/响应合成一张多联图版（1D 为 2 联），返回文件路径
+plate = fwd.plot_figure(sigma, d, out_dir="examples/figs",
+                        prefix="lwd_fdem_forward_2d_plate",
+                        labels=("overburden", "resistive", "baseline"))
 
-# 也可单独取用某一类，绑定到自定义 Axes
+# 反演：真实/回收剖面 + 收敛史图版
+plot_inversion_figure(fwd, rec_sigma, history, sigma_true=sigma_true,
+                      out_dir="examples/figs", prefix="lwd_fdem_inversion_1d")
+
+# 也可单独取用某一面板，或套用统一出版样式
 from src.lwd_fdem import plot_model, plot_mesh
-plot_mesh(fwd, sigma=sigma)   # 网格图（log10 σ + 网格叠加）
+with pub_style():
+    plot_mesh(fwd, sigma=sigma)   # 网格图（log10 σ + 网格叠加）
 ```
 
 ---

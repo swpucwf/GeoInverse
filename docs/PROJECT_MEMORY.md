@@ -58,17 +58,23 @@ LWD-EM-Inv 是用于随钻电磁波测井（LWD-EM）数据的地球物理正反
 | 梯度校验 | 通过 `check_derivative` |
 | 反演回收 | 需定量验证 |
 
-## 6. 正演可视化规范（三件套）
+## 6. 正反演可视化规范（SCI 图版）
 
-正演模块（LWD fdem）必须绘制并输出**模型图 / 网格图（mesh）/ 结果图（响应）**三件套，
-绘制风格严格参考 `external/SimPEG-src/fdem_forward_validation` 的判据图：
+正演模块（LWD fdem）必须输出**模型 / 网格（mesh）/ 响应**三类面板，反演输出
+**真实/回收剖面 + 收敛史**；绘制风格为 **SCI 论文图版**：衬线字体（Times/STIX
+数学）、内向刻度含次刻度、无边框图例、去图内大标题改用 (a)(b)(c) 面板标注、
+英文坐标 + 物理量 LaTeX 记法与单位、300 dpi、`bbox_inches='tight'`。多面板经
+`GridSpec` 合成为**一张多联图版**。内容约定参考
+`external/SimPEG-src/fdem_forward_validation`：
 
-- **模型图**：1D 层状示意（空气层 + 地表线 + 按 σ 着色层块 + 每层标注 σ/ρ/名称 + 层厚 h 箭头 + 井眼 + Tx/Rx 线圈 + 收发距）；2D/3D 采用 log10(σ) 填色。
-- **网格图**：2D/3D 使用 `plot_image/plot_slice(log10 σ, grid=True)`，即 log10 电导率填色叠加网格线，清晰显示 core+padding 疏密及收发线圈位置。
-- **结果图**：1D 采用 loglog 坐标系的 |响应|-频率 频散曲线（可选叠加解析解）；2D/3D 为 |响应|-收发距。
+- **模型**：1D 层状示意（空气层+地表+按 σ 着色层块+σ/ρ/层名+层厚 h+井眼+Tx/Rx 线圈，深度向下）；2D/3D 为 log10(σ) 剖面 + colorbar。
+- **网格**：2D/3D 在 log10(σ) 剖面上叠加网格线（core+padding 疏密）并标注收发线圈（图版中该面板不重复 colorbar）。
+- **响应**：1D 为 log-log \|d\|-频率 频散曲线；2D/3D 为 \|d\|-收发距；曲线用 marker+linestyle 组合区分。
 
-实现见 `src/lwd_fdem/plotting.py`（`plot_model`/`plot_mesh`/`plot_response`/`plot_forward_views`），
-示例通过 `fwd.plot_views(sigma, d, out_dir="examples/figs", prefix=...)` 调用。
+实现见 `src/lwd_fdem/plotting.py`：`pub_style`（样式上下文）、`plot_model`/
+`plot_mesh`/`plot_response`（单面板）、`plot_forward_figure`/`plot_inversion_figure`
+（合成图版，经 `fwd.plot_figure` 调用）、`plot_forward_views`（三张单图，向后兼容）。
+README 案例图版存放于 `docs/images/`（入库），示例产物目录 `examples/figs/` 被忽略。
 
 ## 7. Git 提交规范
 

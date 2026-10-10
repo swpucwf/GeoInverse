@@ -265,42 +265,58 @@ def fig_03_scan_geometry():
 def fig_04_forward_scan(mesh):
     sim, _ = build_scan_simulation(mesh)
     sigma = sigma_from_z(np.asarray(mesh.cell_centers)[:, 2])
-    cube = scan_dpred(sim, sigma)          # (n_f, n_depth, 2)
+    cube = scan_dpred(sim, sigma)          # (n_f, n_depth, 2): [:,0]=Re, [:,1]=Im
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
     colors_f = plt.cm.plasma(np.linspace(0.15, 0.85, len(FREQUENCIES)))
 
     def shade(ax):
         for (z0, z1, idx) in [(-14, Z_BOUNDARIES[0], 0),
                               (Z_BOUNDARIES[0], Z_BOUNDARIES[1], 1),
                               (Z_BOUNDARIES[1], 14, 2)]:
-            ax.axhspan(z0, z1, color=LAYER_COLORS[idx], alpha=0.25, zorder=0)
+            ax.axhspan(z0, z1, color=LAYER_COLORS[idx], alpha=0.22, zorder=0)
 
-    # (a) |Im(Bz)| vs 深度（对数）
-    ax = axes[0]; shade(ax)
-    for i, (f, col) in enumerate(zip(FREQUENCIES, colors_f)):
-        ax.semilogx(np.abs(cube[i, :, 1]), TOOL_DEPTHS, "o-", ms=4, lw=1.6,
-                    color=col, label=f"{f/1e3:.0f} kHz")
-    ax.set(ylabel=T("仪器深度 (m)", "Tool depth (m)"),
-           xlabel=r"$|\mathrm{Im}(B_z^{\mathrm{s}})|$ (T)",
-           title=T("(a) 虚部幅值 — 连续穿透", "(a) Quadrature vs depth"))
-    ax.invert_yaxis(); ax.grid(True, which="both", alpha=0.3); ax.legend()
-
-    # (b) 相位 vs 深度
-    ax = axes[1]; shade(ax)
-    for i, (f, col) in enumerate(zip(FREQUENCIES, colors_f)):
-        phase = np.degrees(np.arctan2(cube[i, :, 1], cube[i, :, 0]))
-        ax.plot(phase, TOOL_DEPTHS, "s-", ms=4, lw=1.6, color=col,
+    def plot_depth(ax, get, logx, marker):
+        for i, (f, col) in enumerate(zip(FREQUENCIES, colors_f)):
+            (ax.semilogx if logx else ax.plot)(
+                get(i), TOOL_DEPTHS, marker + "-", ms=4, lw=1.6, color=col,
                 label=f"{f/1e3:.0f} kHz")
-    ax.set(ylabel=T("仪器深度 (m)", "Tool depth (m)"),
-           xlabel=T("相位 (°)", "Phase ($^\\circ$)"),
-           title=T("(b) 相位 — 连续穿透", "(b) Phase vs depth"))
-    ax.invert_yaxis(); ax.grid(True, which="both", alpha=0.3); ax.legend()
+        ax.invert_yaxis(); ax.grid(True, which="both", alpha=0.3)
+        ax.legend(fontsize=8)
 
-    fig.suptitle(T("图 04  垂直井深度扫描响应（连续穿透三层，磁偶极子·点接收）",
-                   "Fig. 04  Vertical-well depth-scan response (mag. dipole, "
-                   "point receiver)"),
-                 fontsize=11.5, fontweight="bold", y=1.02)
+    # (a) 实部 Re(Bz_s)（带符号，线性）
+    ax = axes[0, 0]; shade(ax)
+    plot_depth(ax, lambda i: cube[i, :, 0], False, "o")
+    ax.set(xlabel=r"$\mathrm{Re}(B_z^{\mathrm{s}})$ (T)",
+           ylabel=T("仪器深度 (m)", "Tool depth (m)"),
+           title=T("(a) 实部 Re — 连续穿透", "(a) In-phase (Re) vs depth"))
+
+    # (b) 虚部 Im(Bz_s)（带符号，线性）
+    ax = axes[0, 1]; shade(ax)
+    plot_depth(ax, lambda i: cube[i, :, 1], False, "s")
+    ax.set(xlabel=r"$\mathrm{Im}(B_z^{\mathrm{s}})$ (T)",
+           ylabel=T("仪器深度 (m)", "Tool depth (m)"),
+           title=T("(b) 虚部 Im — 连续穿透", "(b) Quadrature (Im) vs depth"))
+
+    # (c) 幅值 |Bz_s|（对数）
+    ax = axes[1, 0]; shade(ax)
+    plot_depth(ax, lambda i: np.hypot(cube[i, :, 0], cube[i, :, 1]), True, "^")
+    ax.set(xlabel=r"$|B_z^{\mathrm{s}}|$ (T)",
+           ylabel=T("仪器深度 (m)", "Tool depth (m)"),
+           title=T("(c) 幅值 |Bz| — 连续穿透", "(c) Amplitude vs depth"))
+
+    # (d) 相位（对数）
+    ax = axes[1, 1]; shade(ax)
+    plot_depth(ax, lambda i: np.degrees(
+        np.arctan2(cube[i, :, 1], cube[i, :, 0])), False, "D")
+    ax.set(xlabel=T("相位 (°)", "Phase ($^\\circ$)"),
+           ylabel=T("仪器深度 (m)", "Tool depth (m)"),
+           title=T("(d) 相位 — 连续穿透", "(d) Phase vs depth"))
+
+    fig.suptitle(T("图 04  垂直井深度扫描响应：实部/虚部/幅值/相位（磁偶极子·点接收）",
+                   "Fig. 04  Vertical-well depth-scan response: Re / Im / |Bz| / phase "
+                   "(mag. dipole, point receiver)"),
+                 fontsize=11.5, fontweight="bold", y=1.0)
     fig.tight_layout()
     save_figure(fig, FIG_DIR / "v04_forward_scan.png", dpi=200)
     return cube

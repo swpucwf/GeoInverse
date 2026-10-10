@@ -12,7 +12,8 @@
   * 源：竖直磁偶极子 MagDipole(orientation="z")（绕垂直工具的小线圈）
   * 接收器：点磁探头 PointMagneticFluxDensitySecondary（点接收，小线圈近似）
   * 求解：2D 轴对称柱网格 + b-form（柱对称必须用 EB formulation）
-  * 频率：20 / 100 kHz（去掉 500 kHz——其在导电基底趋肤深度≈1 m，网格难满足）
+  * 频率：20 / 50 / 100 kHz 三条代表频（低/中/高）；去掉 500 kHz——其在导电基底
+    趋肤深度≈1 m，网格难满足
   * 网格：cell=0.5 m，使 cells/δ ≥ 3
 
 本脚本仅新增/自维护，复用 src/lwd_fdem 公共设施（apply_rcparams / save_figure /
@@ -75,7 +76,7 @@ LAYER_NAMES = {
 LAYER_COLORS = ["#b8845a", "#f5e8c8", "#6aaed6"]
 
 # ---- 仪器（单收发距深度扫描）----
-FREQUENCIES = (2e4, 1e5)          # 20 / 100 kHz
+FREQUENCIES = (2e4, 5e4, 1e5)      # 20 / 50 / 100 kHz（低/中/高三条代表频）
 OFFSET = 1.0                      # 固定轴向收发距 L (m)
 TOOL_DEPTHS = np.linspace(-11.0, 11.0, 35)    # 仪器(源)深度扫描范围 (m)
 

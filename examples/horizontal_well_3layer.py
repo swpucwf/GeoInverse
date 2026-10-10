@@ -43,12 +43,9 @@ from src.lwd_fdem import (
     plot_forward_figure,
     plot_inversion_figure,
     pub_style,
-    set_cjk_rcparams,
+    apply_rcparams,
     skin_depth,
 )
-
-# 中文字体 + 数学负号统一配置（复用项目级公共工具，避免脚本内重复实现）
-set_cjk_rcparams()
 
 FIG_DIR = pathlib.Path(__file__).parent / "figs"
 FIG_DIR.mkdir(exist_ok=True)
@@ -58,10 +55,23 @@ FIG_DIR.mkdir(exist_ok=True)
 # 步骤 0：全局参数定义（唯一修改入口）
 # ================================================================ #
 
+# ---- 图版语言 ----
+# "en" = 英文 SCI 图版（默认）；"zh" = 中文图版。改此一行即切换全部图版语言。
+LANG = "en"
+
+
+def T(zh: str, en: str) -> str:
+    """按全局 LANG 返回图面文字（中文或英文）。"""
+    return zh if LANG == "zh" else en
+
+
 # ---- 地层模型 ----
 THICKNESSES  = np.array([3.0, 6.0])          # 各层厚度 (m)，半空间另计
 SIGMA_TRUE   = np.array([0.20, 0.01, 0.50])  # 各层电导率 (S/m)
-LAYER_NAMES  = ["上覆泥岩", "砂岩储层\n(目标)", "水侵基底"]
+LAYER_NAMES  = {
+    "zh": ["上覆泥岩", "砂岩储层\n(目标)", "水侵基底"],
+    "en": ["Overburden\n(shale)", "Reservoir\n(sandstone)", "Basement\n(aquifer)"],
+}
 LAYER_COLORS = ["#b8845a", "#f5e8c8", "#6aaed6"]
 
 # ---- 仪器配置 ----
@@ -81,6 +91,9 @@ SEED         = 42
 MAX_ITER     = 20
 BETA_COOLING = 3.0
 CHIFACT      = 1.0
+
+# 按图版语言设置字体（英文 serif/Times；中文 SimHei + stix 数学），复用公共工具
+apply_rcparams(LANG)
 
 
 def build_forward():
@@ -116,7 +129,7 @@ def fig_01_concept_model():
                                facecolor=LAYER_COLORS[i],
                                edgecolor="k", lw=1.0, alpha=0.90, zorder=1))
         ax.text(6.5, depth + h / 2,
-                f"{LAYER_NAMES[i]}\n"
+                f"{LAYER_NAMES[LANG][i]}\n"
                 rf"$\sigma_{i+1} = {s:.2f}$ S/m"
                 f"   ($\\rho = {1/s:.1f}$ Ω·m)",
                 ha="center", va="center", fontsize=10, zorder=3,
@@ -136,14 +149,16 @@ def fig_01_concept_model():
         depth += h
         ax.axhline(depth, color="k", lw=1.5, xmin=0, xmax=1, zorder=2)
     ax.axhline(0, color="steelblue", lw=2.0, zorder=2)
-    ax.text(-0.3, 0, "地表", ha="right", va="center", fontsize=9, color="steelblue")
+    ax.text(-0.3, 0, T("地表", "Surface"), ha="right", va="center",
+            fontsize=9, color="steelblue")
 
     # 水平井眼轨迹（穿过目标层中部）
     well_z = THICKNESSES[0] + THICKNESSES[1] / 2.0
     ax.annotate("", xy=(11.5, well_z), xytext=(0.5, well_z),
                 arrowprops=dict(arrowstyle="->", lw=2.5, color="crimson",
                                 connectionstyle="arc3,rad=0"))
-    ax.text(1.0, well_z - 0.5, "水平井", fontsize=9, color="crimson", fontstyle="italic")
+    ax.text(1.0, well_z - 0.5, T("水平井", "Horizontal well"),
+            fontsize=9, color="crimson", fontstyle="italic")
 
     # Tx / Rx 线圈符号
     tx_x = 5.0
@@ -160,14 +175,16 @@ def fig_01_concept_model():
     ax.annotate("", xy=(tx_x, well_z - 1.1), xytext=(tx_x + rx_offsets[-1], well_z - 1.1),
                 arrowprops=dict(arrowstyle="<->", lw=1.2, color="gray"))
     ax.text(tx_x + rx_offsets[-1] / 2, well_z - 1.45,
-            f"接收器阵列  0.5–{rx_offsets[-1]:.1f} m",
+            T(f"接收器阵列  0.5–{rx_offsets[-1]:.1f} m",
+              f"Rx array  0.5-{rx_offsets[-1]:.1f} m"),
             ha="center", fontsize=8, color="gray")
 
     ax.set_xlim(-0.5, 14)
     ax.set_ylim(max_depth + 0.5, -1.5)
     ax.set_xticks([])
-    ax.set_ylabel("深度 (m)", fontsize=11)
-    ax.set_title("图 01  地质概念模型 — 水平井三层地层 LWD-FDEM 观测场景",
+    ax.set_ylabel(T("深度 (m)", "Depth (m)"), fontsize=11)
+    ax.set_title(T("图 01  地质概念模型 — 水平井三层地层 LWD-FDEM 观测场景",
+                   "Fig. 01  Conceptual model - Horizontal-well 3-layer LWD-FDEM survey"),
                  fontsize=12, fontweight="bold", pad=10)
     fig.tight_layout()
     _save(fig, "01_concept_model.png")
@@ -213,14 +230,17 @@ def fig_02_mesh(sigma_model=None):
         ax1.axhline(zi, color="k", lw=1.5, xmin=0, xmax=4/4.5, zorder=3)
     ax1.set_xlim(-0.5, 4.5); ax1.set_xticks([])
     ax1.set_ylim(zb[-1] + 1, -1)
-    ax1.set_ylabel("深度 (m)", fontsize=10)
-    ax1.set_title("(a) 1D 张量网格离散", fontsize=10, fontweight="bold")
+    ax1.set_ylabel(T("深度 (m)", "Depth (m)"), fontsize=10)
+    ax1.set_title(T("(a) 1D 张量网格离散", "(a) 1D tensor mesh discretization"),
+                  fontsize=10, fontweight="bold")
 
     # ---- 右图：趋肤深度校核 ----
     freqs_plot = np.logspace(np.log10(FREQUENCIES[0]) - 0.5,
                              np.log10(FREQUENCIES[-1]) + 0.5, 80)
     colors_f = plt.cm.plasma(np.linspace(0.1, 0.9, len(sigma_model)))
-    for s, col, name in zip(sigma_model, colors_f, ["上覆 s1", "储层 s2", "基底 s3"]):
+    names = (["上覆 s1", "储层 s2", "基底 s3"] if LANG == "zh"
+             else ["overburden", "reservoir", "basement"])
+    for s, col, name in zip(sigma_model, colors_f, names):
         deltas = [skin_depth(f, s) for f in freqs_plot]
         ax2.semilogx(freqs_plot, deltas, lw=2.0, color=col, label=f"{name}={s:.2g} S/m")
 
@@ -239,20 +259,24 @@ def fig_02_mesh(sigma_model=None):
     # 网格质量报告
     report = mesh_quality_report(mesh, FREQUENCIES, sigma_model)
     ok_str = "OK" if report["ok"] else "NG"
+    crit = T("判据(>=3)", "criterion (>=3)")
     ax2.text(0.02, 0.97,
              f"cells/δ  = {report['cells_per_skin_depth']:.1f}\n"
              f"max cell = {report['max_cell_size']:.2f} m\n"
              f"min δ    = {report['min_skin_depth']:.2f} m\n"
-             f"判据(>=3): {ok_str}",
+             f"{crit}: {ok_str}",
              transform=ax2.transAxes, va="top", fontsize=8,
              bbox=dict(boxstyle="round", fc="lightyellow", ec="gray", alpha=0.85))
 
-    ax2.set(xlabel="频率 (Hz)", ylabel="趋肤深度 δ (m)",
-            title="(b) 趋肤深度与网格分辨率校核")
+    ax2.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"),
+            ylabel=T("趋肤深度 δ (m)", "Skin depth $\\delta$ (m)"),
+            title=T("(b) 趋肤深度与网格分辨率校核",
+                    "(b) Skin depth vs mesh resolution check"))
     ax2.grid(True, which="both", alpha=0.3)
     ax2.legend(fontsize=8, loc="lower left")
 
-    fig.suptitle("图 02  计算网格构建与趋肤深度校核",
+    fig.suptitle(T("图 02  计算网格构建与趋肤深度校核",
+                   "Fig. 02  Mesh construction & skin-depth check"),
                  fontsize=12, fontweight="bold", y=1.01)
     fig.tight_layout()
     _save(fig, "02_mesh.png")
@@ -298,13 +322,15 @@ def fig_03_survey(cfg, fwd):
                for i in range(n_f)]
     ax1.legend(handles=handles, loc="upper center", fontsize=7.5, ncol=2,
                columnspacing=0.9, handletextpad=0.3,
-               title="工作频率 (Hz)", title_fontsize=8, framealpha=0.92)
+               title=T("工作频率 (Hz)", "Frequency (Hz)"),
+               title_fontsize=8, framealpha=0.92)
 
     ax1.set_xlim(-0.4, SPACINGS[-1] + 0.4)
     ax1.set_ylim(-1.05, 1.75)
-    ax1.set_xlabel("径向收发距 (m)", fontsize=10)
+    ax1.set_xlabel(T("径向收发距 (m)", "Radial offset (m)"), fontsize=10)
     ax1.set_yticks([])
-    ax1.set_title("(a) 仪器空间布局", fontsize=11, fontweight="bold")
+    ax1.set_title(T("(a) 仪器空间布局", "(a) Instrument layout"),
+                  fontsize=11, fontweight="bold")
 
     # ---- 右图：数据排列结构热图（整数单元坐标，刻度与色块严格对齐）----
     d_demo = fwd.dpred(SIGMA_TRUE)
@@ -317,15 +343,16 @@ def fig_03_survey(cfg, fwd):
     ax2.set_xticklabels([f"{s:.1f}" for s in SPACINGS])
     ax2.set_yticks(np.arange(n_f))
     ax2.set_yticklabels([f"{f/1e3:.0f}k" for f in FREQUENCIES])
-    ax2.set_xlabel("收发距 (m)", fontsize=10)
-    ax2.set_ylabel("频率 (Hz)", fontsize=10)
-    ax2.set_title("(b) 实部响应 $\\log_{10}|H_z^{\\mathrm{real}}|$ 强度图\n"
-                  "（亮=高幅值，暗=低幅值）", fontsize=10, fontweight="bold")
+    ax2.set_xlabel(T("收发距 (m)", "Spacing (m)"), fontsize=10)
+    ax2.set_ylabel(T("频率 (Hz)", "Frequency (Hz)"), fontsize=10)
+    ax2.set_title(T("(b) 实部响应 $\\log_{10}|H_z^{\\mathrm{real}}|$ 强度图\n（亮=高幅值，暗=低幅值）",
+                    "(b) In-phase $\\log_{10}|H_z^{\\mathrm{real}}|$ intensity\n(bright=high, dark=low)"),
+                  fontsize=10, fontweight="bold")
     cbar = fig.colorbar(im, ax=ax2, pad=0.04)
     cbar.set_label(r"$\log_{10}|H_z^{\mathrm{real}}|$ (A/m)", fontsize=9)
 
-    fig.suptitle(f"图 03  观测系统配置与数据排列结构"
-                 f"（{n_f}频×{n_s}距×{n_c}分量 = {n_f*n_s*n_c} 道）",
+    fig.suptitle(T(f"图 03  观测系统配置与数据排列结构（{n_f}频×{n_s}距×{n_c}分量 = {n_f*n_s*n_c} 道）",
+                   f"Fig. 03  Survey configuration & data layout ({n_f}f x {n_s}s x {n_c}comp = {n_f*n_s*n_c} channels)"),
                  fontsize=13, fontweight="bold", y=1.02)
     fig.tight_layout()
     _save(fig, "03_survey.png")
@@ -355,8 +382,9 @@ def fig_04_forward_response(fwd, cfg):
     for j, (sp, mk, col) in enumerate(zip(SPACINGS, markers, colors_sp)):
         ax.loglog(freqs, np.abs(mat[:, j, 0]) + 1e-20,
                   marker=mk, ms=5, lw=1.8, color=col, label=f"$s$={sp:.1f} m")
-    ax.set(xlabel="频率 (Hz)", ylabel=r"$|\mathrm{Re}(H_z^s)|$ (A/m)",
-           title="(a) 实部幅值 — 对数坐标（10频点）")
+    ax.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"), ylabel=r"$|\mathrm{Re}(H_z^s)|$ (A/m)",
+           title=T("(a) 实部幅值 — 对数坐标（10频点）",
+                   "(a) In-phase amplitude - log-log (10 freq)"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=7.5)
 
     # (b) 虚部绝对值 vs 频率
@@ -364,8 +392,9 @@ def fig_04_forward_response(fwd, cfg):
     for j, (sp, mk, col) in enumerate(zip(SPACINGS, markers, colors_sp)):
         ax.loglog(freqs, np.abs(mat[:, j, 1]) + 1e-20,
                   marker=mk, ms=5, lw=1.8, color=col, label=f"$s$={sp:.1f} m")
-    ax.set(xlabel="频率 (Hz)", ylabel=r"$|\mathrm{Im}(H_z^s)|$ (A/m)",
-           title="(b) 虚部幅值 — 对数坐标")
+    ax.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"), ylabel=r"$|\mathrm{Im}(H_z^s)|$ (A/m)",
+           title=T("(b) 虚部幅值 — 对数坐标",
+                   "(b) Quadrature amplitude - log-log"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=7.5)
 
     # (c) 总幅值 vs 收发距
@@ -376,8 +405,8 @@ def fig_04_forward_response(fwd, cfg):
         ax.loglog(SPACINGS, amp, marker=markers[i % len(markers)],
                   ms=5, lw=1.6, color=col, alpha=0.85,
                   label=f"{f/1e3:.0f} kHz")
-    ax.set(xlabel="收发距 (m)", ylabel=r"$|H_z^s|$ (A/m)",
-           title="(c) 总幅值 — 收发距特性")
+    ax.set(xlabel=T("收发距 (m)", "Spacing (m)"), ylabel=r"$|H_z^s|$ (A/m)",
+           title=T("(c) 总幅值 — 收发距特性", "(c) Total amplitude vs spacing"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=7.5, ncol=2)
 
     # (d) 相位 vs 频率（np.unwrap 消除卷绕）
@@ -387,13 +416,14 @@ def fig_04_forward_response(fwd, cfg):
         phase = np.degrees(phase_rad)
         ax.semilogx(freqs, phase, marker=mk, ms=5, lw=1.8, color=col,
                     label=f"$s$={sp:.1f} m")
-    ax.set(xlabel="频率 (Hz)", ylabel="相位 (°，展开)",
-           title="(d) 相位 — np.unwrap 消除卷绕")
+    ax.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"),
+           ylabel=T("相位 (°，展开)", "Phase ($^\\circ$, unwrapped)"),
+           title=T("(d) 相位 — np.unwrap 消除卷绕",
+                   "(d) Phase - np.unwrap (no wrapping)"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=7.5)
 
-    fig.suptitle("图 04  正演响应曲线（三层模型，清洁数据）\n"
-                 rf"$\sigma=[{SIGMA_TRUE[0]},\ {SIGMA_TRUE[1]},\ {SIGMA_TRUE[2]}]$ S/m,"
-                 f"  厚度=[{THICKNESSES[0]}, {THICKNESSES[1]}] m",
+    fig.suptitle(T("图 04  正演响应曲线（三层模型，清洁数据）",
+                   "Fig. 04  Forward response (3-layer model, clean data)"),
                  fontsize=11, fontweight="bold", y=1.02)
     fig.tight_layout()
     _save(fig, "04_forward_response.png")
@@ -416,12 +446,14 @@ def fig_05_synthetic_data(fwd, cfg):
     # (a) 实部清洁 vs 含噪（取第3个收发距 = 1.5 m）
     ax = axes[0, 0]
     ax.semilogx(freqs, mat_c[:, 2, 0], "o-", ms=6, lw=2.0, color="steelblue",
-                label="清洁数据")
+                label=T("清洁数据", "clean"))
     ax.semilogx(freqs, mat_n[:, 2, 0], "s--", ms=6, lw=1.8, color="crimson",
-                alpha=0.8, label=f"含 {NOISE_LEVEL*100:.0f}% 噪声观测")
+                alpha=0.8, label=T(f"含 {NOISE_LEVEL*100:.0f}% 噪声观测",
+                                   f"observed +{NOISE_LEVEL*100:.0f}% noise"))
     ax.axhline(0, color="k", lw=0.8, ls="--")
-    ax.set(xlabel="频率 (Hz)", ylabel=r"$\mathrm{Re}(H_z^s)$ (A/m)",
-           title=f"(a) 实部：清洁 vs 含噪（$s$=1.5 m）")
+    ax.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"), ylabel=r"$\mathrm{Re}(H_z^s)$ (A/m)",
+           title=T(f"(a) 实部：清洁 vs 含噪（$s$=1.5 m）",
+                   f"(a) In-phase: clean vs noisy ($s$=1.5 m)"))
     ax.grid(True, which="both", alpha=0.3); ax.legend()
 
     # (b) 噪声分布直方图
@@ -430,10 +462,11 @@ def fig_05_synthetic_data(fwd, cfg):
     ax.hist(noise / d_clean * 100, bins=20, color="steelblue", alpha=0.75,
             edgecolor="k", density=False)
     ax.axvline(-NOISE_LEVEL * 100, color="crimson", lw=1.5, ls="--",
-               label=f"±{NOISE_LEVEL*100:.0f}% 噪声带")
+               label=T(f"±{NOISE_LEVEL*100:.0f}% 噪声带",
+                       f"±{NOISE_LEVEL*100:.0f}% noise band"))
     ax.axvline(NOISE_LEVEL * 100, color="crimson", lw=1.5, ls="--")
-    ax.set(xlabel="相对噪声 (%)", ylabel="频次",
-           title=f"(b) 噪声分布（seed={SEED}）")
+    ax.set(xlabel=T("相对噪声 (%)", "Relative noise (%)"), ylabel=T("频次", "Count"),
+           title=T(f"(b) 噪声分布（seed={SEED}）", f"(b) Noise distribution (seed={SEED})"))
     ax.legend(); ax.grid(alpha=0.3)
 
     # (c) 绝对误差棒图（各收发距，实部）
@@ -443,8 +476,8 @@ def fig_05_synthetic_data(fwd, cfg):
         ax.errorbar(SPACINGS, np.abs(mat_n[i, :, 0]),
                     yerr=abs_err[i, :, 0], fmt="o-", ms=5, lw=1.5,
                     capsize=3, color=col, alpha=0.8, label=f"{f/1e3:.0f} kHz")
-    ax.set(xlabel="收发距 (m)", ylabel=r"$|\mathrm{Re}(H_z^s)|$ (A/m)",
-           title="(c) 含噪观测与误差棒")
+    ax.set(xlabel=T("收发距 (m)", "Spacing (m)"), ylabel=r"$|\mathrm{Re}(H_z^s)|$ (A/m)",
+           title=T("(c) 含噪观测与误差棒", "(c) Noisy data with error bars"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=7.5)
 
     # (d) 数据 vs 模型散点（全局）
@@ -453,13 +486,15 @@ def fig_05_synthetic_data(fwd, cfg):
                c=np.log10(np.abs(d_clean) + 1e-20), cmap="coolwarm",
                edgecolors="k", lw=0.3)
     lim = [min(d_clean / std) * 0.9, max(d_clean / std) * 1.1]
-    ax.plot(lim, lim, "k--", lw=1.5, label="理想 1:1 线")
+    ax.plot(lim, lim, "k--", lw=1.5, label=T("理想 1:1 线", "ideal 1:1"))
     ax.set(xlabel=r"$d_{\rm true}/\sigma_n$",
            ylabel=r"$d_{\rm obs}/\sigma_n$",
-           title=f"(d) 标准化观测散点图（nD={d_clean.size}）")
+           title=T(f"(d) 标准化观测散点图（nD={d_clean.size}）",
+                   f"(d) Normalized scatter (nD={d_clean.size})"))
     ax.legend(); ax.grid(alpha=0.3)
 
-    fig.suptitle(f"图 05  合成观测数据（噪声水平 {NOISE_LEVEL*100:.0f}%）",
+    fig.suptitle(T(f"图 05  合成观测数据（噪声水平 {NOISE_LEVEL*100:.0f}%）",
+                   f"Fig. 05  Synthetic data ({NOISE_LEVEL*100:.0f}% noise)"),
                  fontsize=12, fontweight="bold", y=1.02)
     fig.tight_layout()
     _save(fig, "05_synthetic_data.png")
@@ -506,26 +541,26 @@ def fig_06_inversion(fwd, dobs, std):
     # (a) 深度剖面（线性σ）
     ax = axes[0]
     ax.step(SIGMA_TRUE, centers, where="mid", color="k", ls="--", lw=2.2,
-           label="真实模型", zorder=3)
+           label=T("真实模型", "true model"), zorder=3)
     ax.step(rec_sigma, centers, where="mid", color="C0", lw=2.2, marker="o",
-           ms=6, label="回收模型", zorder=4)
+           ms=6, label=T("回收模型", "recovered"), zorder=4)
     for i, (yt, yb) in enumerate(zip(bounds[:-1],
                                       np.r_[bounds[1:], bounds[-1] + th[-1] * 1.5])):
         ax.axhspan(yt, yb, alpha=0.07, color=LAYER_COLORS[i])
         ax.axhline(yt, color="gray", lw=0.8, ls=":")
-    ax.set(xlabel=r"$\sigma$ (S/m)", ylabel="深度 (m)",
-           title="(a) 电导率剖面")
+    ax.set(xlabel=r"$\sigma$ (S/m)", ylabel=T("深度 (m)", "Depth (m)"),
+           title=T("(a) 电导率剖面", "(a) Conductivity profile"))
     ax.invert_yaxis(); ax.legend(fontsize=9)
 
     # (b) 对数坐标剖面
     ax = axes[1]
     ax.step(SIGMA_TRUE, centers, where="mid", color="k", ls="--", lw=2.2,
-            label="真实模型")
+            label=T("真实模型", "true model"))
     ax.step(rec_sigma, centers, where="mid", color="C2", lw=2.2, marker="s",
-            ms=6, label="回收模型")
+            ms=6, label=T("回收模型", "recovered"))
     ax.set_xscale("log")
-    ax.set(xlabel=r"$\sigma$ (S/m, log)", ylabel="深度 (m)",
-           title="(b) 对数坐标剖面")
+    ax.set(xlabel=r"$\sigma$ (S/m, log)", ylabel=T("深度 (m)", "Depth (m)"),
+           title=T("(b) 对数坐标剖面", "(b) Log-scale profile"))
     ax.invert_yaxis(); ax.legend(fontsize=9)
     ax.grid(True, which="both", alpha=0.3)
 
@@ -539,20 +574,22 @@ def fig_06_inversion(fwd, dobs, std):
     for k, (c, mk) in enumerate(zip(["k", "gray", "C0"], ["o", "s", "^"])):
         ax.semilogx(freqs, np.abs(mat_tru[:, k, 0]), c=c, ls="--",
                      marker=mk, ms=5, lw=1.5,
-                     label=f"真实 $s$={SPACINGS[k]:.1f}m" if c == "k" else None)
+                     label=T(f"真实 $s$={SPACINGS[k]:.1f}m", f"true $s$={SPACINGS[k]:.1f}m") if c == "k" else None)
         ax.semilogx(freqs, np.abs(mat_obs[:, k, 0]), c="gray", ls=":",
                      marker="x", ms=4, lw=1.0,
-                     label=f"观测 $s$={SPACINGS[k]:.1f}m" if c == "gray" else None)
+                     label=T(f"观测 $s$={SPACINGS[k]:.1f}m", f"obs $s$={SPACINGS[k]:.1f}m") if c == "gray" else None)
         ax.semilogx(freqs, np.abs(mat_rec[:, k, 0]), c=c, ls="-",
                      marker=mk, ms=5, lw=1.8,
-                     label=f"反演 $s$={SPACINGS[k]:.1f}m" if c == "C0" else None)
-    ax.set(xlabel="频率 (Hz)", ylabel=r"$|H_z^s|$ (A/m)",
-           title="(c) 响应拟合对比")
+                     label=T(f"反演 $s$={SPACINGS[k]:.1f}m", f"inv $s$={SPACINGS[k]:.1f}m") if c == "C0" else None)
+    ax.set(xlabel=T("频率 (Hz)", "Frequency (Hz)"), ylabel=r"$|H_z^s|$ (A/m)",
+           title=T("(c) 响应拟合对比", "(c) Response fit comparison"))
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(fontsize=7.5, ncol=1)
 
-    fig.suptitle(f"图 06  Occam 反演回收（迭代 {len(history['iterations'])} 次，"
-                 f"$\\phi_d$/nD={history['final_phi_d']/dobs.size:.2f}）",
+    fig.suptitle(T(f"图 06  Occam 反演回收（迭代 {len(history['iterations'])} 次，"
+                   f"$\\phi_d$/nD={history['final_phi_d']/dobs.size:.2f}）",
+                   f"Fig. 06  Occam inversion ({len(history['iterations'])} iters, "
+                   f"$\\phi_d$/nD={history['final_phi_d']/dobs.size:.2f})"),
                  fontsize=12, fontweight="bold", y=1.01)
     fig.tight_layout()
     _save(fig, "06_inversion.png")
@@ -578,17 +615,21 @@ def fig_07_convergence(history, dobs, fwd):
     ax.semilogy(x, phi_d, "o-", ms=6, lw=2.0, color="C0", label=r"$\phi_d$")
     target = len(dobs) * CHIFACT
     ax.axhline(target, color="crimson", ls="--", lw=1.5,
-               label=f"目标 = chifact×nD = {target:.0f}")
+               label=T(f"目标 = chifact×nD = {target:.0f}",
+                       f"target = chifact x nD = {target:.0f}"))
     ax.axvline(x[-1], color="gray", ls=":", lw=1.0, alpha=0.7)
-    ax.text(x[-1] * 1.02, phi_d[-1] * 1.5, f"迭代={x[-1]}", fontsize=8, color="gray")
-    ax.set(xlabel="迭代次数", ylabel=r"$\phi_d$", title="(a) 数据拟合差收敛")
+    ax.text(x[-1] * 1.02, phi_d[-1] * 1.5, T(f"迭代={x[-1]}", f"iter={x[-1]}"),
+            fontsize=8, color="gray")
+    ax.set(xlabel=T("迭代次数", "Iteration"), ylabel=r"$\phi_d$",
+           title=T("(a) 数据拟合差收敛", "(a) Data-misfit convergence"))
     ax.grid(True, which="both", alpha=0.3); ax.legend(fontsize=9)
 
     # (b) β 冷却
     ax = axes[0, 1]
     ax.loglog(x, beta, "s-", ms=6, lw=2.0, color="darkorange")
-    ax.set(xlabel="迭代次数", ylabel=r"$\beta$",
-           title=f"(b) β 冷却过程（cooling_factor={BETA_COOLING}）")
+    ax.set(xlabel=T("迭代次数", "Iteration"), ylabel=r"$\beta$",
+           title=T(f"(b) β 冷却过程（cooling_factor={BETA_COOLING}）",
+                   f"(b) $\\beta$ cooling (factor={BETA_COOLING})"))
     ax.grid(True, which="both", alpha=0.3)
     # 在曲线上标注每次冷却的时刻
     prev_b = beta[0]
@@ -601,14 +642,15 @@ def fig_07_convergence(history, dobs, fwd):
 
     # (c) 剪刀差 φ_d / φ_m（共享迭代轴）
     ax = axes[1, 0]
-    ax.semilogy(x, phi_d, "o-", ms=5, lw=1.8, color="C0", label=r"$\phi_d$（拟合差）")
+    ax.semilogy(x, phi_d, "o-", ms=5, lw=1.8, color="C0", label=T(r"$\phi_d$（拟合差）", r"$\phi_d$ (misfit)"))
     axb = ax.twinx()
     axb.semilogy(x, phi_m, "^-", ms=5, lw=1.8, color="seagreen",
-                 label=r"$\phi_m$（正则化）")
+                 label=T(r"$\phi_m$（正则化）", r"$\phi_m$ (reg)"))
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = axb.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="center right")
-    ax.set(xlabel="迭代次数", ylabel=r"$\phi_d$", title="(c) 剪刀差收敛过程")
+    ax.set(xlabel=T("迭代次数", "Iteration"), ylabel=r"$\phi_d$",
+           title=T("(c) 剪刀差收敛过程", "(c) Misfit vs regularization"))
     axb.set_ylabel(r"$\phi_m$")
     ax.grid(True, which="both", alpha=0.3)
 
@@ -620,18 +662,19 @@ def fig_07_convergence(history, dobs, fwd):
     ax.hist(residual * 100, bins=20, color="steelblue", alpha=0.78,
             edgecolor="k")
     ax.axvline(-NOISE_LEVEL * 100, color="crimson", ls="--", lw=1.5,
-               label=f"±{NOISE_LEVEL*100:.0f}% 噪声")
+               label=T(f"±{NOISE_LEVEL*100:.0f}% 噪声", f"±{NOISE_LEVEL*100:.0f}% noise"))
     ax.axvline(NOISE_LEVEL * 100, color="crimson", ls="--", lw=1.5)
     ax.axvline(0, color="k", lw=1.2)
     rms = np.sqrt(np.mean(residual ** 2)) * 100
-    ax.text(0.97, 0.93, f"RMS 相对残差\n= {rms:.2f}%",
+    ax.text(0.97, 0.93, T(f"RMS 相对残差\n= {rms:.2f}%", f"RMS rel. residual\n= {rms:.2f}%"),
             transform=ax.transAxes, ha="right", va="top", fontsize=8.5,
             bbox=dict(boxstyle="round", fc="lightyellow", ec="gray"))
-    ax.set(xlabel="相对残差 (%)", ylabel="频数",
-           title=f"(d) 最终残差分布（nD={len(dobs)}）")
+    ax.set(xlabel=T("相对残差 (%)", "Relative residual (%)"), ylabel=T("频数", "Count"),
+           title=T(f"(d) 最终残差分布（nD={len(dobs)}）", f"(d) Final residual (nD={len(dobs)})"))
     ax.legend(fontsize=9); ax.grid(alpha=0.3)
 
-    fig.suptitle("图 07  反演收敛历史与质量诊断",
+    fig.suptitle(T("图 07  反演收敛历史与质量诊断",
+                   "Fig. 07  Convergence history & diagnostics"),
                  fontsize=12, fontweight="bold", y=1.02)
     fig.tight_layout()
     _save(fig, "07_convergence.png")
@@ -658,7 +701,7 @@ def main():
     print("=" * 60)
     print("  水平井三层地层 LWD-FDEM 正反演完整流程")
     print("=" * 60)
-    print(f"\n地层: {list(zip(LAYER_NAMES, THICKNESSES.tolist() + ['∞'], SIGMA_TRUE))}")
+    print(f"\n地层: {list(zip(LAYER_NAMES[LANG], THICKNESSES.tolist() + ['∞'], SIGMA_TRUE))}")
     print(f"观测: {len(FREQUENCIES)}频 × {len(SPACINGS)}距 × {len(COMPONENTS)}分量"
           f" = {len(FREQUENCIES)*len(SPACINGS)*len(COMPONENTS)} 道")
 

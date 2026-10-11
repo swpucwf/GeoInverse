@@ -16,6 +16,8 @@ from .apparent import (apparent_resistivity_from_hz, apparent_resistivity_matrix
                        apparent_resistivity_from_forward)
 from .advanced import (compute_sensitivity_matrix, compute_sensitivity_diagonal,
                        forward_parallel_frequencies, export_las2)
+from .doi import (doi_1d_sensitivity, doi_skin_depth_estimate,
+                  doi_resolution_matrix, doi_summary)
 from .forward import LWDFDEMForward
 from .inversion import LWDFDEMInversion
 from .meshes import (
@@ -72,6 +74,10 @@ __all__ = [
     "compute_sensitivity_diagonal",
     "forward_parallel_frequencies",
     "export_las2",
+    "doi_1d_sensitivity",
+    "doi_skin_depth_estimate",
+    "doi_resolution_matrix",
+    "doi_summary",
     "plot_model",
     "plot_mesh",
     "plot_response",

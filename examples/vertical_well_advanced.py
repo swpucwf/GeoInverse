@@ -176,20 +176,31 @@ def fig_B_inversion_compare(mesh):
 
     cc = np.asarray(mesh.cell_centers)
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
+    
+    # 统一色标范围（基于真实模型）
+    vmin = np.log10(np.minimum(sigma_true.min(), min(rec_smooth.min(), rec_sparse.min())))
+    vmax = np.log10(np.maximum(sigma_true.max(), max(rec_smooth.max(), rec_sparse.max())))
+    
     for ax, val, ttl in [
         (axes[0], sigma_true, T("真实模型", "True model")),
         (axes[1], rec_smooth, T("Occam 平滑回收", "Occam smooth")),
         (axes[2], rec_sparse, T("稀疏块状回收", "Sparse blocky")),
     ]:
-        ax.tripcolor(cc[:, 0], cc[:, 2], np.log10(np.maximum(val, 1e-12)),
-                     cmap="viridis", shading="flat")
+        im = ax.tripcolor(cc[:, 0], cc[:, 2], np.log10(np.maximum(val, 1e-12)),
+                         cmap="viridis", shading="flat", vmin=vmin, vmax=vmax)
         for zb in Z_BOUNDARIES:
             ax.axhline(zb, color="w", lw=0.8, ls="--")
         ax.set(xlabel="r (m)", ylabel=T("深度 z (m)", "Depth z (m)"), title=ttl)
+    
+    # 添加统一色标
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.set_label(r"$\log_{10}(\sigma)$ (S/m)")
+    
     fig.suptitle(T("图 B  2D 反演正则化对比：Occam 平滑 vs 稀疏块状（业务层子类封装 sparse）",
                    "Fig. B  2D inversion: Occam smooth vs Sparse (business-layer subclass)"),
                  fontsize=11, fontweight="bold", y=1.02)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 0.9, 1])  # 为色标留空间
     save_figure(fig, FIG_DIR / "B_inversion_compare.png", dpi=200)
 
 

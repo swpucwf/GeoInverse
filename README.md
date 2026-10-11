@@ -126,6 +126,16 @@ plot_inversion_figure(fwd, rec_sigma, history, sigma_true=sigma_true,
 > 冲突（子类过滤掉 BetaSchedule）；② 稀疏 `norms` 长度须 = 1+网格维数（2D 传 `[0,1,1]`）。
 > 这两处业务层封装本身的修正列为待做 TODO。
 
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [使用手册](docs/USER_GUIDE.md) | 从安装到出图的完整工作流，含代码示例 |
+| [参数速查表](docs/PARAMETER_REFERENCE.md) | 所有 API 参数的物理含义、取值范围、典型值 |
+| [常见问题](docs/FAQ.md) | 安装报错、正演/反演问题排查与解决方案 |
+| [架构说明](docs/ARCHITECTURE.md) | 代码分层与模块职责（面向开发者） |
+| [编码规范](docs/CODING_STANDARDS.md) | 命名、注释、测试规范（面向开发者） |
+
 ## 目录结构
 
 ```

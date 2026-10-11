@@ -47,18 +47,20 @@ def test_sliding_window_basic():
     n_depths = 5
     depths = np.arange(n_depths) * 1.0  # 0, 1, 2, 3, 4 m
 
-    # 为每个深度生成数据（这里简化：所有深度用同一模型）
+    # 为每个深度生成数据（使用不同模型模拟真实井况）
     fwd_template = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
-    d_template = fwd_template.dpred(sigma_true)
-    nD = len(d_template)
+    nD = len(fwd_template.dpred(sigma_true))
 
-    # 添加少量噪声，构建 (n_depths, nD) 数组
+    # 不同深度使用略微不同的模型（模拟地层变化）
     np.random.seed(42)
     noise_level = 0.01
     data_at_depths = np.zeros((n_depths, nD))
     for i in range(n_depths):
-        noise = np.random.randn(nD) * noise_level * np.abs(d_template)
-        data_at_depths[i] = d_template + noise
+        # 每层电导率随深度有小幅变化（±10%）
+        sigma_depth = sigma_true * (1.0 + 0.1 * np.sin(i * np.pi / n_depths))
+        d_depth = fwd_template.dpred(sigma_depth)
+        noise = np.random.randn(nD) * noise_level * np.abs(d_depth)
+        data_at_depths[i] = d_depth + noise
 
     # 构建器：接收 data_avg，返回正演对象
     def forward_builder(data_avg):
@@ -68,8 +70,9 @@ def test_sliding_window_basic():
     def inversion_runner(forward, data_target):
         from src.lwd_fdem.dataio import make_data_object
         data_obj = make_data_object(forward.survey, data_target, relative_error=0.05)
+        # 初始模型设为 log(0.1)，接近真实模型平均值
         m0 = np.log(0.1 * np.ones(forward.n_params))
-        inv = LWDFDEMInversion(forward, data_obj, m0=m0, max_iter=10)
+        inv = LWDFDEMInversion(forward, data_obj, m0=m0, max_iter=30, beta_cooling=5.0)
         sigma, _ = inv.run()
         return sigma
 
@@ -191,17 +194,19 @@ def test_end_to_end():
     depths = np.array([0.0, 1.0, 2.0])
 
     fwd_template = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
-    d_template = fwd_template.dpred(sigma_true)
-    nD = len(d_template)
+    nD = len(fwd_template.dpred(sigma_true))
 
-    # 构建 (n_depths, nD) 数组
+    # 不同深度使用略微不同的模型
+    np.random.seed(42)
     data_at_depths = np.zeros((n_depths, nD))
     for i in range(n_depths):
-        data_at_depths[i] = d_template.copy()
+        sigma_depth = sigma_true * (1.0 + 0.05 * np.sin(i * np.pi / n_depths))
+        d_depth = fwd_template.dpred(sigma_depth)
+        data_at_depths[i] = d_depth
 
     # 使用简单构建器和运行器
     builder = simple_window_builder(tool, thicknesses, n_layers=3)
-    runner = simple_inversion_runner(max_iter=10)
+    runner = simple_inversion_runner(max_iter=30, beta_cooling=5.0)
 
     # 执行滑动窗口反演
     result = sliding_window_inversion_1d(
@@ -254,16 +259,20 @@ def test_sliding_window_visualization():
     depths = np.arange(n_depths) * 1.0
 
     fwd_template = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
-    d_template = fwd_template.dpred(sigma_true)
-    nD = len(d_template)
+    nD = len(fwd_template.dpred(sigma_true))
 
+    # 不同深度使用略微不同的模型
+    np.random.seed(42)
     data_at_depths = np.zeros((n_depths, nD))
     for i in range(n_depths):
-        data_at_depths[i] = d_template.copy()
+        sigma_depth = sigma_true * (1.0 + 0.1 * np.sin(i * np.pi / n_depths))
+        d_depth = fwd_template.dpred(sigma_depth)
+        noise = np.random.randn(nD) * 0.01 * np.abs(d_depth)
+        data_at_depths[i] = d_depth + noise
 
     # 执行滑动窗口反演
     builder = simple_window_builder(tool, thicknesses, n_layers=3)
-    runner = simple_inversion_runner(max_iter=10)
+    runner = simple_inversion_runner(max_iter=30, beta_cooling=5.0)
 
     result = sliding_window_inversion_1d(
         depths=depths,

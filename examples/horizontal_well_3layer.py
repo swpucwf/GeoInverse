@@ -85,11 +85,11 @@ SPACINGS     = np.array([0.5, 1.0, 1.5, 2.0, 3.0])  # 收发距 (m)
 COMPONENTS   = ("real", "imag")
 
 # ---- 反演设置 ----
-M0_SIGMA     = 0.1       # 初始均匀模型电导率 (S/m)
-NOISE_LEVEL  = 0.02      # 相对噪声水平 (2%)
+M0_SIGMA     = 0.05      # 初始模型（偏小，利于发现低阻层）
+NOISE_LEVEL  = 0.01      # 相对噪声水平 (1%，降低噪声改善信噪比)
 SEED         = 42
-MAX_ITER     = 20
-BETA_COOLING = 3.0
+MAX_ITER     = 40        # 增加迭代次数以改善收敛
+BETA_COOLING = 5.0       # 更渐进的 beta 冷却
 CHIFACT      = 1.0
 
 # 按图版语言设置字体（英文 serif/Times；中文 SimHei + stix 数学），复用公共工具

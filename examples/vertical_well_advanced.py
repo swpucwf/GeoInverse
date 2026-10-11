@@ -140,7 +140,7 @@ def fig_A_source_compare(mesh):
     fig.suptitle(T("图 A  2D 轴对称源类型对比：磁偶极子 vs 有限回线 CircularLoop",
                    "Fig. A  2D axisymmetric source compare: MagDipole vs CircularLoop"),
                  fontsize=11, fontweight="bold", y=1.0)
-    fig.tight_layout()
+    fig.subplots_adjust(wspace=0.35)  # 增加子图间距
     save_figure(fig, FIG_DIR / "A_source_compare.png", dpi=200)
 
 

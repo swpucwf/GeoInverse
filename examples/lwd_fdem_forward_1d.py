@@ -44,7 +44,7 @@ def hz_analytic_halfspace(r, freqs, sigma):
 def main():
     # ---- 1) 仪器配置：4 个频率、3 个收发距、记录 Hz 二次场实/虚部 ----
     cfg = LWDToolConfig(
-        frequencies=(1e4, 1e5, 5e5, 1e6),
+        frequencies=(1e4, 1e5, 5e5),  # 去掉 1 MHz，避免接近虚部过零 (~2 MHz)
         spacings=np.array([0.3, 0.6, 1.0]),
         components=("real", "imag"),
         field_kind="h", secondary=True, data_type="field",
@@ -79,7 +79,7 @@ def main():
     ax1.grid(True, which="both", alpha=0.3)
     ax1.legend(fontsize=8)
 
-    freqs = np.logspace(3, 6.5, 60)
+    freqs = np.logspace(3, 5.8, 60)  # 上限 10^5.8≈630 kHz，避免虚部过零 (~2 MHz) 导致对数图突变
     hz_cont = hz_analytic_halfspace(1.0, freqs, 0.1)
     ax2.loglog(freqs, np.abs(hz_cont.real), "C0-", label="解析 real")
     ax2.loglog(freqs, np.abs(hz_cont.imag), "C3-", label="解析 imag")

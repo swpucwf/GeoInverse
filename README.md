@@ -151,7 +151,7 @@ LWD-EM-Inv/
 ### 优先级总览（未完成项）
 
 **P0 高（正确性 / 研究核心，建议优先）**
-- 修复 `LWDFDEMInversion(sparse=True)` 业务层封装 bug（BetaSchedule/UpdateIRLS 冲突、norms 长度需=1+dim）；现由示例子类临时规避
+- ~~修复 `LWDFDEMInversion(sparse=True)` 业务层封装 bug~~——已修（5868c84）：sparse 时不加 BetaSchedule、norms 按 1+dim 自适应
 - FDEM 电导率各向异性 VTI/HTI（正演+反演）——页岩随钻电法的核合物理
 
 **P1 中（接实测 / 论文复现所需）**
@@ -191,7 +191,7 @@ LWD-EM-Inv/
 - [x] 各向同性水平层状（1D）/ 轴对称 r-z（2D）/ 直角（3D）
 - [x] 非均匀磁导率（`muMap`）
 - [~] 侵入剖面、倾斜地层/断层——2D/3D 模型可表达，示例未演示
-- [ ] 电导率各向异性 VTI/HTI（FDEM 仿真未接各向异性 σ）
+- [~] 电导率各向异性 VTI/HTI——3D TensorMesh (e-form) 已支持张量 σ（discretize `get_edge_inner_product` 消费 `(nc,3)`）；2D 轴对称 CylindricalMesh 的 edge inner product 丢弃方向信息（`discretize` 库限制），垂直井场景暂不可用
 - [ ] 介电色散/频变（Cole-Cole；现仅常数 `permittivity`）
 
 ### 物理近似

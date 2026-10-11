@@ -174,6 +174,20 @@ class LWDFDEMInversion:
         """反演用仿真（电导率走 ExpMap）。"""
         return self.forward.build_simulation(sigma_map=self.build_mapping())
 
+    def _sparse_norms(self, dim: int) -> list:
+        """把稀疏 norms 规整为长度 1+dim（小扰动 + 各方向平滑范数）。
+
+        用户显式给了正确长度则原样返回；给默认两元素 [p_s, p_g] 时，
+        按网格维度复制平滑范数（如 2D→[p_s, p_g, p_g]）。
+        """
+        norms = list(self.norms) if self.norms is not None else [0, 2]
+        n = 1 + dim
+        if len(norms) == n:
+            return norms
+        if len(norms) == 2:
+            return [norms[0]] + [norms[1]] * dim
+        return (norms + [norms[-1]] * n)[:n]
+
     def build_regularization(self):
         """构建正则化目标函数。"""
         mesh = self.reg_mesh
@@ -185,7 +199,7 @@ class LWDFDEMInversion:
                 alpha_y=self.alpha_y if self.alpha_y is not None else 1.0,
                 alpha_z=self.alpha_z if self.alpha_z is not None else 1.0,
             )
-            reg.norms = self.norms
+            reg.norms = self._sparse_norms(mesh.dim)
         else:
             reg = regularization.WeightedLeastSquares(
                 mesh, mapping=mapping,
@@ -217,7 +231,9 @@ class LWDFDEMInversion:
                 directives.UpdateSensitivityWeights(every_iteration=False)
             )
         directive_list.append(directives.BetaEstimate_ByEig(beta0_ratio=self.beta0_ratio))
-        directive_list.append(directives.BetaSchedule(coolingFactor=self.beta_cooling))
+        # sparse 时 β 冷却由 UpdateIRLS 自管，不能再加 BetaSchedule（否则与 IRLS 冲突）
+        if not self.sparse:
+            directive_list.append(directives.BetaSchedule(coolingFactor=self.beta_cooling))
         if self.preconditioner and not self.sparse:
             directive_list.append(directives.UpdatePreconditioner())
         directive_list.append(save)

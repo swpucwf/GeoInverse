@@ -28,7 +28,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.fdemcore import directives, maps
+from src.fdemcore import maps
 from src.fdemcore.electromagnetics import frequency_domain as fdem
 from src.fdemcore.electromagnetics.frequency_domain import receivers as _rx
 from src.fdemcore.electromagnetics.frequency_domain import sources as _src
@@ -75,16 +75,6 @@ def sigma_from_z(z):
 def build_mesh():
     return build_2d_cyl_mesh(r_core=R_CORE, z_core=Z_CORE, cell_size=CELL,
                              n_pad=N_PAD, pad_factor=1.3)
-
-
-class _SparseOKInversion(LWDFDEMInversion):
-    """业务层封装：过滤掉与 UpdateIRLS 冲突的 BetaSchedule（不改原模块）。"""
-
-    def build_directives(self):
-        dl = super().build_directives()
-        if self.sparse:
-            dl = [d for d in dl if not isinstance(d, directives.BetaSchedule)]
-        return dl
 
 
 # ================================================================ #
@@ -170,7 +160,7 @@ def fig_B_inversion_compare(mesh):
     m0 = np.log(0.1 * np.ones(mesh.n_cells))
 
     def run(sparse):
-        inv = _SparseOKInversion(
+        inv = LWDFDEMInversion(
             fwd, data, m0=m0, max_iter=5, sparse=sparse,
             norms=[0, 1, 1] if sparse else None,   # 2D: norms 长度需 = 1+dim = 3
             alpha_s=1e-3, alpha_x=1.0, alpha_z=1.0,

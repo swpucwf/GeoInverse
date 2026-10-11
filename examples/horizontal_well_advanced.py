@@ -31,22 +31,6 @@ from src.lwd_fdem import (
     add_synthetic_noise, apply_rcparams, case_fig_dir, make_data_object,
     save_figure,
 )
-from src.fdemcore import directives
-
-
-class _SparseOKInversion(LWDFDEMInversion):
-    """业务层封装：修正 LWDFDEMInversion 在 sparse=True 时的指令冲突。
-
-    底层 bug（未改）：build_directives 对 sparse 同时加了 BetaSchedule 与
-    UpdateIRLS，而 UpdateIRLS 自管 β 冷却、断言不得共存 BetaSchedule。
-    这里不改原模块，仅子类过滤掉 BetaSchedule（属业务层封装）。
-    """
-
-    def build_directives(self):
-        dl = super().build_directives()
-        if self.sparse:
-            dl = [d for d in dl if not isinstance(d, directives.BetaSchedule)]
-        return dl
 
 FIG_DIR = case_fig_dir(__file__)
 
@@ -130,7 +114,7 @@ def fig_A_field_compare():
 # ================================================================ #
 
 def _run_inv(fwd, data, sparse):
-    inv = _SparseOKInversion(
+    inv = LWDFDEMInversion(
         fwd, data, m0=np.log(0.1 * np.ones(len(SIGMA_TRUE))),
         max_iter=15, sparse=sparse,
         alpha_s=1e-3, alpha_x=1.0,

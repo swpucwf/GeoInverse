@@ -60,30 +60,103 @@ def _cyl_reduced_mesh(mesh):
 class LWDFDEMInversion:
     """LWD FDEM 反演器（1D / 2D 轴对称 / 3D 通用组装）。
 
-    反演变量为 log(sigma)（ExpMap 保证正性），正则化网格：
-    1D 几何使用层状张量网格，2D/3D 使用正演网格。
+    本类是反演计算的统一入口，基于 fdemcore 的目标函数体系
+    （data_misfit + regularization + optimization + directives）
+    组装 Occam 风格反演外循环。
+
+    反演参数化为 log(sigma)（ExpMap 保证电导率始终为正）。
+    正则化网格：1D 使用层状张量网格，2D/3D 使用正演网格。
+
+    主要方法:
+        - ``run()``: 执行完整反演流程，返回反演结果模型。
+        - ``compute_sensitivity(m)``: 计算并返回灵敏度矩阵 J。
+
+    Args:
+        forward: 正演求解器。
+            *物理含义*: 封装了正演计算与灵敏度矩阵乘积的完整链路。
+            *使用方式*: 传入已配置好的 ``LWDFDEMForward`` 实例。
+            *应用场景*: 所有反演均必需。
+
+        data_obj: 观测数据对象。
+            *物理含义*: 包含实测数据向量 dobs 和标准差 uncertainty，
+            用于构建数据目标函数 φ_d = ||W(d_pred - d_obs)||²。
+            *使用方式*: ``fdemcore.data.Data`` 实例，须已设置 dobs 和 standard_deviation。
+            *应用场景*: 所有反演均必需。
+
+        m0: 初始模型（log-电导率）。
+            *物理含义*: 反演迭代的起始模型，为 log(σ) 形式。
+            *使用方式*: 1D numpy 数组，形状 (n_params,)。
+            ``None`` 时为 log(0.1) 常模型（即初始电导率 0.1 S/m）。
+            *应用场景*: 初始模型影响反演收敛路径，建议根据先验信息设置。
+
+        mref: 参考模型（log-电导率）。
+            *物理含义*: 正则化项中的参考模型，正则化度量模型与参考模型的偏离。
+            *使用方式*: 1D numpy 数组，形状 (n_params,)。``None`` 时为 m0。
+            *应用场景*: 平滑约束反演中常设为背景值或先验模型。
+
+        sparse: 是否使用稀疏正则化。
+            *物理含义*: True 时使用 IRLS（迭代重加权最小二乘）求 Lp 范数稀疏解，
+            促进块状/边界尖锐模型；False 时使用 L2 范数平滑约束。
+            *使用方式*: 布尔值，默认 False。
+            *应用场景*: 地层边界尖锐、异常体定位时开启；平滑地层用 False。
+
+        alpha_s: 小扰动（最小结构）权重。
+            *物理含义*: 正则化中模型与参考模型偏离的惩罚系数。
+            *使用方式*: 非负浮点数，默认 1e-3。
+            *应用场景*: 值越小越允许模型偏离参考，数据拟合优先。
+
+        alpha_x / alpha_y / alpha_z: 各方向一阶平滑权重。
+            *物理含义*: 正则化中模型在 x/y/z 方向空间变化的惩罚系数。
+            *使用方式*: 非负浮点数。1D 仅用 alpha_z；2D 用 alpha_x (r) + alpha_z (z)；
+            3D 全用。``None`` 时默认 1.0。
+            *应用场景*: 控制模型平滑方向偏好；各向同性平滑全设 1.0；
+            倾向平滑可增大某个方向。
+
+        norms: 稀疏正则化的范数阶数。
+            *物理含义*: ``[p, q]`` 分别对应模型目标函数 p-范数和梯度目标函数 q-范数。
+            *使用方式*: 列表，如 ``[0, 2]``（L0 + L2，默认）或 ``[1, 1]``（L1 + TV）。
+            *应用场景*: 仅 ``sparse=True`` 时生效。
+
+        optimizer: 优化器类型。
+            *物理含义*: ``'gn'`` 为不精确 Gauss-Newton；``'pgncg'`` 为投影 GN 共轭梯度。
+            *使用方式*: 字符串，默认 ``'gn'``。
+            *应用场景*: 中小规模用 ``'gn'``；大规模/带约束用 ``'pgncg'``。
+
+        beta0_ratio: 初始 beta 比例。
+            *物理含义*: 数据目标函数与正则化的初始权衡系数（由特征值估计缩放）。
+            *使用方式*: 正浮点数，默认 1.0。
+            *应用场景*: 调大则初始更重数据拟合，调小则更重正则化。
+
+        beta_cooling: Beta 冷却因子。
+            *物理含义*: 每轮迭代后 beta 乘以的因子（逐步降低正则化权重）。
+            *使用方式*: 大于 1 的浮点数，默认 5.0。
+            *应用场景*: Occam 风格冷却策略，逐步从平滑解过渡到数据拟合解。
+
+        chifact: 目标拟合差系数。
+            *物理含义*: 目标 phi_d = chifact × nD（nD 为数据个数）。
+            *使用方式*: 正浮点数，默认 1.0。
+            *应用场景*: 当 phi_d 降至目标值以下时停止反演。
+            标准差估计准确时取 1.0。
+
+        max_iter: 最大迭代次数。
+            *物理含义*: 反演迭代上限。
+            *使用方式*: 正整数，默认 40。
+            *应用场景*: 防止不收敛时无限循环。
+
+        sensitivity_weights: 是否启用灵敏度加权。
+            *物理含义*: 基于灵敏度矩阵的对角元构造加权，补偿深部灵敏度衰减。
+            *使用方式*: 布尔值，默认 False。
+            *应用场景*: 深部地层反演时开启可改善分辨率。
+
+        preconditioner: 是否启用 Jacobi 预条件。
+            *物理含义*: 用 Gauss-Newton 矩阵对角元作预条件，加速共轭梯度收敛。
+            *使用方式*: 布尔值，默认 False。
+            *应用场景*: 仅 ``optimizer='pgncg'`` 时生效。
 
     Attributes:
         forward: 已配置的正演求解器。
         data_obj: fdemcore data.Data 观测数据。
         m0: 初始模型（log-sigma），形状 (n_params,)。
-
-    Args:
-        forward: LWDFDEMForward 实例。
-        data_obj: 观测数据对象（dobs 与标准差已设置）。
-        m0: 初始 log-电导率模型；None 时为 log(0.1) 常模型。
-        mref: 参考模型（log-sigma）；None 时为 m0。
-        sparse: 是否使用稀疏正则化（块状模型，IRLS）。
-        alpha_s / alpha_x / alpha_y / alpha_z: 正则化权重
-            （小扰动 / 各方向一阶平滑）。
-        norms: sparse=True 时的 [p, q] 范数，默认 [0, 2]。
-        optimizer: 'gn'（不精确高斯-牛顿）或 'pgncg'（投影 GN 共轭梯度）。
-        beta0_ratio: BetaEstimate_ByEig 的初始 beta 比例。
-        beta_cooling: BetaSchedule 冷却因子。
-        chifact: TargetMisfit 的目标 phi_d 系数。
-        max_iter: 最大迭代次数。
-        sensitivity_weights: 是否启用敏感度加权。
-        preconditioner: 是否启用 Jacobi 预条件更新。
     """
 
     def __init__(self, forward: LWDFDEMForward, data_obj,
@@ -292,13 +365,19 @@ class LWDFDEMInversion:
         return self._to_model_space(self.m0, "m0")
 
     def run(self) -> Tuple[np.ndarray, Dict]:
-        """运行反演。
+        """执行完整反演流程。
+
+        *物理含义*: 组装数据目标函数 + 正则化 + 优化器 + 指令链，
+        从初始模型出发迭代求解非线性反演问题，直至达到目标拟合差或最大迭代。
+        *使用方式*: 无需参数，所有配置在构造时已设定。调用后返回反演结果。
+        *应用场景*: 反演计算主入口。
 
         Returns:
             (recovered_sigma, history)：
               recovered_sigma: 恢复的电导率模型 (S/m)，形状 (n_params,)。
               history: 字典，含 'model_log'（最终 log-sigma）、'iterations'
-                （每次迭代的 phi_d/phi_m/beta 记录列表）。
+                （每次迭代的 phi_d/phi_m/beta 记录列表）、'final_phi_d'、
+                'final_phi_m'、'final_beta'。
         """
         simulation = self.build_simulation()
         dmisfit = data_misfit.L2DataMisfit(data=self.data_obj,

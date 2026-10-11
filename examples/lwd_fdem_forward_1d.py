@@ -69,26 +69,38 @@ def main():
     err_i = np.max(np.abs(d_half[:, 2, 1] - hz.imag) / np.abs(hz.imag))
     print(f"\n半空间对标最大相对误差: real {err_r:.2e}, imag {err_i:.2e} (tol 1e-3)")
 
-    # ---- 4) 绘图 ----
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
-    for i, f in enumerate(cfg.frequencies):
-        ax1.semilogx(cfg.spacings, np.abs(mat[i, :, 0]), "o-", label=f"{f/1e3:.0f} kHz real")
-        ax1.semilogx(cfg.spacings, np.abs(mat[i, :, 1]), "s--", label=f"{f/1e3:.0f} kHz imag")
-    ax1.set(xlabel="收发距 (m)", ylabel=r"|Hz secondary| (A/m)",
-            title="1D 层状响应 (0.25/0.01/0.5 S/m)", xticks=cfg.spacings)
-    ax1.grid(True, which="both", alpha=0.3)
-    ax1.legend(fontsize=8)
+    # ---- 4) 绘图（2x2：实部/虚部分开） ----
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    ax_rl, ax_il, ax_rr, ax_ir = axes[0, 0], axes[1, 0], axes[0, 1], axes[1, 1]
 
-    freqs = np.logspace(3, 5.8, 60)  # 上限 10^5.8≈630 kHz，避免虚部过零 (~2 MHz) 导致对数图突变
+    # 左列：响应 vs 收发距
+    for i, f in enumerate(cfg.frequencies):
+        ax_rl.semilogx(cfg.spacings, mat[i, :, 0], "o-", label=f"{f/1e3:.0f} kHz")
+        ax_il.semilogx(cfg.spacings, mat[i, :, 1], "s--", label=f"{f/1e3:.0f} kHz")
+    ax_rl.set(xlabel="收发距 (m)", ylabel=r"Re[Hz$^s$] (A/m)",
+              title="实部 (0.25/0.01/0.5 S/m)", xticks=cfg.spacings)
+    ax_rl.grid(True, which="both", alpha=0.3)
+    ax_rl.legend(fontsize=8)
+    ax_il.set(xlabel="收发距 (m)", ylabel=r"Im[Hz$^s$] (A/m)",
+              title="虚部 (0.25/0.01/0.5 S/m)", xticks=cfg.spacings)
+    ax_il.grid(True, which="both", alpha=0.3)
+    ax_il.legend(fontsize=8)
+
+    # 右列：半空间对标 vs 频率
+    freqs = np.logspace(3, 5.8, 60)
     hz_cont = hz_analytic_halfspace(1.0, freqs, 0.1)
-    ax2.loglog(freqs, np.abs(hz_cont.real), "C0-", label="解析 real")
-    ax2.loglog(freqs, np.abs(hz_cont.imag), "C3-", label="解析 imag")
-    ax2.loglog(cfg.frequencies, np.abs(d_half[:, 2, 0]), "C0o", label="SimPEG real")
-    ax2.loglog(cfg.frequencies, np.abs(d_half[:, 2, 1]), "C3s", label="SimPEG imag")
-    ax2.set(xlabel="频率 (Hz)", ylabel=r"|Hz secondary| (A/m)",
-            title=r"半空间对标 (0.1 S/m, r=1 m)")
-    ax2.grid(True, which="both", alpha=0.3)
-    ax2.legend(fontsize=8)
+    ax_rr.loglog(freqs, np.abs(hz_cont.real), "C0-", label="解析")
+    ax_rr.loglog(cfg.frequencies, np.abs(d_half[:, 2, 0]), "C0o", label="SimPEG")
+    ax_rr.set(xlabel="频率 (Hz)", ylabel=r"|Re[Hz$^s$]| (A/m)",
+              title="实部对标 (0.1 S/m, r=1 m)")
+    ax_rr.grid(True, which="both", alpha=0.3)
+    ax_rr.legend(fontsize=8)
+    ax_ir.loglog(freqs, np.abs(hz_cont.imag), "C3-", label="解析")
+    ax_ir.loglog(cfg.frequencies, np.abs(d_half[:, 2, 1]), "C3s", label="SimPEG")
+    ax_ir.set(xlabel="频率 (Hz)", ylabel=r"|Im[Hz$^s$]| (A/m)",
+              title="虚部对标 (0.1 S/m, r=1 m)")
+    ax_ir.grid(True, which="both", alpha=0.3)
+    ax_ir.legend(fontsize=8)
     fig.tight_layout()
     out = FIG_DIR / "lwd_fdem_forward_1d.png"
     fig.savefig(out, dpi=150)

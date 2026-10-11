@@ -18,6 +18,8 @@ from .advanced import (compute_sensitivity_matrix, compute_sensitivity_diagonal,
                        forward_parallel_frequencies, export_las2)
 from .doi import (doi_1d_sensitivity, doi_skin_depth_estimate,
                   doi_resolution_matrix, doi_summary)
+from .window import (sliding_window_inversion_1d, simple_window_builder,
+                     simple_inversion_runner)
 from .forward import LWDFDEMForward
 from .inversion import LWDFDEMInversion
 from .meshes import (
@@ -78,6 +80,9 @@ __all__ = [
     "doi_skin_depth_estimate",
     "doi_resolution_matrix",
     "doi_summary",
+    "sliding_window_inversion_1d",
+    "simple_window_builder",
+    "simple_inversion_runner",
     "plot_model",
     "plot_mesh",
     "plot_response",

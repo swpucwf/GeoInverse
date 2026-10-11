@@ -12,6 +12,10 @@
 """
 
 from .dataio import add_synthetic_noise, load_lwd_csv, make_data_object
+from .apparent import (apparent_resistivity_from_hz, apparent_resistivity_matrix,
+                       apparent_resistivity_from_forward)
+from .advanced import (compute_sensitivity_matrix, compute_sensitivity_diagonal,
+                       forward_parallel_frequencies, export_las2)
 from .forward import LWDFDEMForward
 from .inversion import LWDFDEMInversion
 from .meshes import (
@@ -61,6 +65,13 @@ __all__ = [
     "add_synthetic_noise",
     "make_data_object",
     "load_lwd_csv",
+    "apparent_resistivity_from_hz",
+    "apparent_resistivity_matrix",
+    "apparent_resistivity_from_forward",
+    "compute_sensitivity_matrix",
+    "compute_sensitivity_diagonal",
+    "forward_parallel_frequencies",
+    "export_las2",
     "plot_model",
     "plot_mesh",
     "plot_response",

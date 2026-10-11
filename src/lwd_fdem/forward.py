@@ -8,7 +8,7 @@ Copyright 2026 LWD-EM-Inv Team (Apache-2.0)
 """
 
 import logging
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -51,6 +51,10 @@ class LWDFDEMForward:
         form: 覆盖默认离散形式（'e'/'b'/'h'/'j'）；None 时按 tool.field_kind 自动选择。
         sigma_map: 电导率映射；None 时默认恒等映射（模型向量 = 单元电导率 S/m）。
         solver: 线性求解器类；None 时使用 fdemcore 默认直接法。
+        cole_cole: Cole-Cole 频散参数（仅 1D 几何生效），字典格式
+            ``{'eta': float|array, 'tau': float|array, 'c': float|array}``。
+            eta 为充电子率 (0≤η<1)，tau 为弛豫时间 (s)，c 为频率指数 (0<c<1)。
+            标量时各层相同；数组时长度须等于层数。None 时无频散（默认）。
 
     Raises:
         ValueError: 几何/网格/参数不匹配时。
@@ -60,7 +64,8 @@ class LWDFDEMForward:
                  layer_thicknesses: Optional[np.ndarray] = None,
                  mesh=None, form: Optional[str] = None,
                  sigma_map: Optional[maps.IdentityMap] = None,
-                 solver=None):
+                 solver=None,
+                 cole_cole: Optional[Dict] = None):
         validate_string("geometry", geometry, string_list=("1d", "2d_cyl", "3d"))
         self.geometry = geometry
         self.tool = tool
@@ -88,7 +93,46 @@ class LWDFDEMForward:
         self.survey = build_survey(tool, self.form)
         self._sigma_map = sigma_map
         self._solver = solver
+        self._cole_cole = self._validate_cole_cole(cole_cole, geometry)
         self._simulation = None
+
+    # ------------------------------------------------------------------ #
+    # Cole-Cole 参数校验
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _validate_cole_cole(cc: Optional[Dict], geometry: str) -> Optional[Dict]:
+        """校验 Cole-Cole 参数字典，返回规范化后的字典或 None。"""
+        if cc is None:
+            return None
+        if geometry != "1d":
+            raise ValueError(
+                "Cole-Cole 频散目前仅支持 1D 层状几何"
+                "（Simulation1DLayered 内置 Pelton 公式）；"
+                "2D/3D 仿真尚未实现频率依赖 σ(ω)。"
+            )
+        required = {"eta", "tau", "c"}
+        missing = required - set(cc.keys())
+        if missing:
+            raise ValueError(f"cole_cole 字典缺少键: {missing}")
+        out = {}
+        for key in ("eta", "tau", "c"):
+            v = np.atleast_1d(np.asarray(cc[key], dtype=float))
+            if v.ndim != 1:
+                raise ValueError(f"cole_cole['{key}'] 须为标量或 1D 数组")
+            out[key] = v
+        # 物理范围检查
+        if np.any(out["eta"] < 0) or np.any(out["eta"] >= 1):
+            raise ValueError("eta (充电子率) 须满足 0 ≤ eta < 1")
+        if np.any(out["tau"] <= 0):
+            raise ValueError("tau (弛豫时间) 须为正数")
+        if np.any(out["c"] <= 0) or np.any(out["c"] >= 1):
+            raise ValueError("c (频率指数) 须满足 0 < c < 1")
+        return out
+
+    @property
+    def cole_cole(self) -> Optional[Dict]:
+        """Cole-Cole 频散参数（只读）。"""
+        return self._cole_cole
 
     # ------------------------------------------------------------------ #
     # 仿真构建
@@ -117,11 +161,16 @@ class LWDFDEMForward:
         if s_map is None:
             s_map = self.default_sigma_map()
         if self.geometry == "1d":
-            sim = fdem.Simulation1DLayered(
+            kw_1d = dict(
                 survey=self.survey,
                 thicknesses=self.layer_thicknesses,
                 sigmaMap=s_map,
             )
+            if self._cole_cole is not None:
+                kw_1d["eta"] = self._cole_cole["eta"]
+                kw_1d["tau"] = self._cole_cole["tau"]
+                kw_1d["c"] = self._cole_cole["c"]
+            sim = fdem.Simulation1DLayered(**kw_1d)
         else:
             cls = _SIM_CLASSES[self.form]
             kwargs = dict(mesh=self.mesh, survey=self.survey, sigmaMap=s_map)

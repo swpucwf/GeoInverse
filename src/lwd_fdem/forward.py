@@ -11,15 +11,16 @@ import logging
 from typing import Dict, Literal, Optional, Tuple
 
 import numpy as np
+import scipy.sparse as sp
 
 from ..fdemcore import maps
 from ..fdemcore.electromagnetics import frequency_domain as fdem
 from ..fdemcore.utils import validate_string
-from .survey import LWDToolConfig, build_survey, data_order
+from .survey import LWDToolConfig, build_survey, build_survey_tilted, data_order
 
 logger = logging.getLogger(__name__)
 
-Geometry = Literal["1d", "2d_cyl", "3d"]
+Geometry = Literal["1d", "2d_cyl", "2d_tensor", "1d_tensor", "3d"]
 
 # 场量到 FVM 离散形式的默认映射
 _DEFAULT_FORM = {"e": "e", "b": "b", "h": "h", "j": "j"}
@@ -30,6 +31,95 @@ _SIM_CLASSES = {
     "h": fdem.Simulation3DMagneticField,
     "j": fdem.Simulation3DCurrentDensity,
 }
+
+
+class _AnisotropicSigmaMap(maps.IdentityMap):
+    """各向异性电导率映射：flat 模型向量 (n_cells*3,) → sigma (n_cells, 3)。
+
+    *物理含义*: 反演/正演的模型向量必须是一维的——fdemcore 的
+    ``simulation.model`` 经 ``props.validate_ndarray_with_shape(shape=('*',))``
+    校验，只接受 1D 数组；而 discretize 的 ``get_edge_inner_product`` /
+    ``get_face_inner_product`` 仅当 sigma 形状**严格**为 ``(n_cells, 3)`` 时
+    才按对角各向异性张量解释。扁平 ``(3*n_cells,)`` 数组既不报错也不等价于
+    ``(n_cells, 3)``：``make_property_tensor`` 内部用 ``mkvc``（Fortran 列主序）
+    展平，会把按单元 C 序排列的分量错配到错误的方向分组，静默给出错误物理结果。
+    本映射把"1D 模型向量"与"2D 张量 sigma"两层解耦：模型按单元 C 序排列
+    ``[σ_xx, σ_yy, σ_zz]``，映射输出 ``(n_cells, 3)``。
+
+    *使用方式*: ``LWDFDEMForward(anisotropic=True)`` 时由 ``default_sigma_map()``
+    自动创建；反演中若需 ``ExpMap``，应写作
+    ``_AnisotropicSigmaMap(nP=3*n_cells) * maps.ExpMap(nP=3*n_cells)``
+    （本映射置于链末端，负责最终的形状变换）。
+
+    Args:
+        nP: 模型参数个数，须为 ``3 * n_cells``（``'*'`` 时按输入长度推断）。
+    """
+
+    def __init__(self, mesh=None, nP=None, **kwargs):
+        super().__init__(mesh=mesh, nP=nP, **kwargs)
+        self._permutation = None
+
+    def _transform(self, m):
+        """flat (n_cells*3,) → (n_cells, 3)，按单元 C 序解释分量。"""
+        return np.asarray(m, dtype=float).reshape(-1, 3)
+
+    @property
+    def shape_output(self):
+        """映射输出形状 ``(n_cells, 3)``。"""
+        nP = self.nP
+        if not isinstance(nP, (int, np.integer)):
+            return ("*", 3)
+        return (int(nP) // 3, 3)
+
+    def _n_cells_from(self, m=None) -> int:
+        """由 nP（或模型长度）推断单元数，并校验可被 3 整除。"""
+        nP = self.nP
+        if not isinstance(nP, (int, np.integer)):
+            if m is None:
+                raise ValueError(
+                    "_AnisotropicSigmaMap 需要确定的 nP 才能构造导数矩阵"
+                    "（当前 nP='*' 且未提供模型向量）。"
+                )
+            nP = int(np.asarray(m).ravel().size)
+        nP = int(nP)
+        if nP % 3 != 0:
+            raise ValueError(
+                f"各向异性映射的参数个数须为 3 的倍数（3*n_cells），当前 nP={nP}。"
+            )
+        return nP // 3
+
+    def _permutation_matrix(self, m=None) -> sp.csr_matrix:
+        """构造 (3*n_cells, nP) 置换矩阵 P，使 ``P @ m == mkvc(self._transform(m))``。
+
+        discretize 的内积导数算子以**列主序扁平 sigma**
+        （``[σ_xx 全体, σ_yy 全体, σ_zz 全体]``）为列空间，故导数矩阵不能是
+        单位阵，而必须是该 C 序 → F 序的置换。
+        """
+        if self._permutation is None:
+            n_cells = self._n_cells_from(m)
+            nP = 3 * n_cells
+            cell_idx = np.tile(np.arange(n_cells), 3)          # i
+            comp_idx = np.repeat(np.arange(3), n_cells)        # j
+            rows = comp_idx * n_cells + cell_idx               # F 序输出索引
+            cols = cell_idx * 3 + comp_idx                     # C 序输入索引
+            self._permutation = sp.csr_matrix(
+                (np.ones(nP), (rows, cols)), shape=(nP, nP)
+            )
+        return self._permutation
+
+    def deriv(self, m, v=None):
+        """映射导数。
+
+        ``v is None`` 时返回稀疏置换矩阵 (3*n_cells, nP)：fdemcore 的
+        ``sigmaDeriv`` 以 ``mapping.deriv(model)`` 形式取矩阵，并与
+        ``mesh.get_edge_inner_product_deriv`` 的列空间（列主序扁平 sigma）对接，
+        因此这里必须给出 C 序模型 → F 序 sigma 的置换，而非单位阵。
+        ``v`` 非 None 时返回同一矩阵与 ``v`` 的乘积，保持与矩阵形式自洽。
+        """
+        P = self._permutation_matrix(m)
+        if v is not None:
+            return P @ np.asarray(v, dtype=float).ravel()
+        return P
 
 
 class LWDFDEMForward:
@@ -123,10 +213,32 @@ class LWDFDEMForward:
                  mesh=None, form: Optional[str] = None,
                  sigma_map: Optional[maps.IdentityMap] = None,
                  solver=None,
-                 cole_cole: Optional[Dict] = None):
-        validate_string("geometry", geometry, string_list=("1d", "2d_cyl", "3d"))
+                 cole_cole: Optional[Dict] = None,
+                 anisotropic: bool = False):
+        validate_string("geometry", geometry,
+                        string_list=("1d", "2d_cyl", "2d_tensor",
+                                     "1d_tensor", "3d"))
         self.geometry = geometry
         self.tool = tool
+        self._anisotropic = anisotropic
+        self._layer_thicknesses = None
+
+        # ---- 维度能力校验（仅对新参数触发，不影响既有路径） ----
+        if geometry == '2d_cyl':
+            if (tool.inclination != 0.0 or tool.azimuth != 0.0
+                    or tool.tool_face != 0.0):
+                raise NotImplementedError(
+                    "2D 轴对称路径 (CylindricalMesh) 不支持倾斜仪器。"
+                    "轴对称假设要求源必须为 z 方向。"
+                    "请使用 geometry='2d_tensor'、'1d_tensor' 或 '3d'。"
+                )
+        if geometry == '1d' and anisotropic:
+            raise NotImplementedError(
+                "1D Hankel 路径暂不支持各向异性（底层 geoana "
+                "rTE_forward 仅接受标量 sigma）。"
+                "各向异性模拟请使用 geometry='1d_tensor'、"
+                "'2d_tensor' 或 '3d'。"
+            )
 
         if geometry == "1d":
             if tool.receiver_geometry != "radial":
@@ -140,6 +252,33 @@ class LWDFDEMForward:
             self.layer_thicknesses = thicknesses
             self.mesh = None
             self.form = "1d"
+        elif geometry == "1d_tensor":
+            # 1D 层状参数化 + 3D TensorMesh FVM 求解
+            thicknesses = np.asarray(layer_thicknesses, dtype=float)
+            if thicknesses.ndim != 1 or np.any(thicknesses <= 0):
+                raise ValueError(
+                    "geometry='1d_tensor' 时 layer_thicknesses "
+                    "必须为正的 1D 数组 (m)。"
+                )
+            self._layer_thicknesses = thicknesses
+            self.layer_thicknesses = thicknesses
+            if mesh is None:
+                from .meshes import build_3d_tensor_mesh
+                z_extent = float(np.sum(thicknesses)) * 4.0
+                x_extent = z_extent * 0.5
+                mesh = build_3d_tensor_mesh(
+                    core_extent=(x_extent, x_extent * 0.1, z_extent),
+                    frequencies=tool.frequencies,
+                    conductivities=[0.001, 1.0],
+                )
+            self.mesh = mesh
+            self.form = form or _DEFAULT_FORM[tool.field_kind]
+            validate_string("form", self.form,
+                            string_list=("e", "b", "h", "j"))
+            # 预计算层界面深度
+            self._layer_boundaries = np.concatenate(
+                [[0.0], np.cumsum(thicknesses)]
+            )
         else:
             if mesh is None:
                 raise ValueError(f"geometry={geometry!r} 时必须提供 mesh。")
@@ -153,6 +292,20 @@ class LWDFDEMForward:
         self._solver = solver
         self._cole_cole = self._validate_cole_cole(cole_cole, geometry)
         self._simulation = None
+        # 新路径使用倾斜仪器 survey 构建器覆盖
+        if geometry in ('1d_tensor', '2d_tensor'):
+            self.survey = build_survey_tilted(tool, self.form)
+        # 2d_tensor 路径需要计算 2D 参数数量
+        self._n_2d_params: Optional[int] = None
+        if geometry == '2d_tensor':
+            core_w = getattr(self.mesh, '_lwd_core_widths', None)
+            if core_w is not None:
+                nx_core = len(core_w[0])
+                nz_core = len(core_w[2])
+                self._n_2d_params = nx_core * nz_core
+            else:
+                self._n_2d_params = (self.mesh.shape_cells[0]
+                                     * self.mesh.shape_cells[2])
 
     # ------------------------------------------------------------------ #
     # Cole-Cole 参数校验
@@ -200,10 +353,38 @@ class LWDFDEMForward:
         """模型参数个数（1D：层数含半空间；2D/3D：单元数）。"""
         if self.geometry == "1d":
             return len(self.layer_thicknesses) + 1
+        if self.geometry == "1d_tensor":
+            n_layers = len(self._layer_thicknesses) + 1
+            return n_layers * 2 if self._anisotropic else n_layers
+        if self.geometry == "2d_tensor":
+            if self._anisotropic:
+                return self._n_2d_params * 2
+            return self._n_2d_params
+        if self._anisotropic:
+            return int(self.mesh.n_cells) * 3
         return int(self.mesh.n_cells)
 
     def default_sigma_map(self) -> maps.IdentityMap:
-        """默认电导率映射（恒等，nP=n_params）。"""
+        """默认电导率映射。
+
+        各向同性路径返回 ``IdentityMap(nP=n_params)``（模型向量 = 单元电导率）。
+
+        各向异性路径返回 ``_AnisotropicSigmaMap(nP=n_cells*3)``：模型向量保持
+        flat 1D（fdemcore 的 ``simulation.model`` 只接受 1D），而映射输出严格为
+        ``(n_cells, 3)`` 的张量 sigma，供 discretize 的
+        ``get_edge_inner_product`` 正确识别为对角各向异性。
+
+        对于 1d_tensor 路径，sigmaMap 作用于网格级 sigma
+        （dpred 先做层→网格映射再调用 simulation）。
+        """
+        if self.geometry == '1d_tensor':
+            # dpred 先调 _build_sigma_from_layers_1d 转为网格级 sigma，
+            # 然后传给 simulation.dpred，所以 sigmaMap 用网格维度
+            if self._anisotropic:
+                return _AnisotropicSigmaMap(nP=int(self.mesh.n_cells) * 3)
+            return maps.IdentityMap(nP=int(self.mesh.n_cells))
+        if self._anisotropic and self.geometry in ('2d_tensor', '3d'):
+            return _AnisotropicSigmaMap(nP=int(self.mesh.n_cells) * 3)
         return maps.IdentityMap(nP=self.n_params)
 
     def build_simulation(self, sigma_map: Optional[maps.IdentityMap] = None):
@@ -264,13 +445,65 @@ class LWDFDEMForward:
         Args:
             sigma: 电导率模型向量 (S/m)。
                 1D: 形状 (n_layers+1,)，自上而下，末层为半空间。
-                2D/3D: 形状 (n_cells,)，每个网格单元一个电导率值。
+                1d_tensor: 形状 (n_layers,) 或 (n_layers*2,) 各向异性时。
+                2D/3D: 形状 (n_cells,) 或 (n_cells*3,) 各向异性时；
+                各向异性也接受 (n_cells, 3) 二维数组（内部自动展平，
+                形状还原由 sigmaMap 负责）。
 
         Returns:
             预测数据向量，形状 (nD,)。
             排列顺序：频率 → 收发距 → 分量（与 ``data_order`` 一致）。
         """
-        return self.simulation.dpred(np.asarray(sigma, dtype=float))
+        sigma = np.asarray(sigma, dtype=float)
+        # 1d_tensor 路径：层参数 → 网格 sigma
+        if self.geometry == '1d_tensor':
+            sigma_grid = self._build_sigma_from_layers_1d(sigma)
+            return self.simulation.dpred(self._as_flat_model(sigma_grid))
+        # 其余路径：模型向量必须保持 flat 1D 交给 simulation，
+        # 各向异性的 (n_cells, 3) 形状还原由 sigmaMap 完成。
+        return self.simulation.dpred(self._as_flat_model(sigma))
+
+    def _as_flat_model(self, sigma: np.ndarray) -> np.ndarray:
+        """把待传入 ``simulation.dpred`` 的模型压平为 1D，并对各向异性做形状断言。
+
+        fdemcore 的 ``simulation.model`` 只接受 1D 数组（``shape=('*',)``）；
+        而各向异性时 discretize 要求 sigmaMap 输出严格为 ``(n_cells, 3)``，
+        否则扁平数组会被静默接受却给出错误物理结果。故在此统一压平并校验。
+        """
+        sigma = np.asarray(sigma, dtype=float)
+        if sigma.ndim > 1:
+            if not self._anisotropic:
+                raise ValueError(
+                    "各向同性路径的模型向量必须为 1D，"
+                    f"实际得到 shape={sigma.shape}。"
+                )
+            sigma = sigma.ravel()
+        if self._anisotropic and self.mesh is not None:
+            self._assert_tensor_sigma_shape(sigma)
+        return sigma
+
+    def _assert_tensor_sigma_shape(self, sigma_flat: np.ndarray) -> None:
+        """断言各向异性 sigmaMap 输出严格为 (n_cells, 3)。
+
+        Args:
+            sigma_flat: flat 模型向量，形状 (n_cells*3,)。
+
+        Raises:
+            ValueError: sigmaMap 输出形状不是 (n_cells, 3) 时。
+        """
+        s_map = getattr(self.simulation, "sigmaMap", None)
+        if s_map is None:
+            return
+        expected = (int(self.mesh.n_cells), 3)
+        mapped = s_map * np.asarray(sigma_flat, dtype=float).ravel()
+        if getattr(mapped, "shape", None) != expected:
+            raise ValueError(
+                f"各向异性正演要求 sigmaMap 输出形状为 {expected}，实际得到 "
+                f"{getattr(mapped, 'shape', None)}。discretize 的 "
+                "get_edge_inner_product 对扁平 (3*n_cells,) 数组不报错，但会按"
+                "列主序错配方向权重而静默给出错误结果；请使用 "
+                "lwd_fdem.forward._AnisotropicSigmaMap（或以其包裹 ExpMap 等）。"
+            )
 
     def jvec(self, sigma: np.ndarray, v: np.ndarray) -> np.ndarray:
         """计算灵敏度矩阵与向量的乘积 J·v（方向导数）。
@@ -288,8 +521,8 @@ class LWDFDEMForward:
         Returns:
             J·v，形状 (nD,)。
         """
-        return self.simulation.Jvec(np.asarray(sigma, dtype=float),
-                                    np.asarray(v, dtype=float))
+        return self.simulation.Jvec(self._as_flat_model(sigma),
+                                    np.asarray(v, dtype=float).ravel())
 
     def jtvec(self, sigma: np.ndarray, v: np.ndarray) -> np.ndarray:
         """计算灵敏度矩阵转置与向量的乘积 Jᵀ·v（伴随方向导数）。
@@ -307,8 +540,66 @@ class LWDFDEMForward:
         Returns:
             Jᵀ·v，形状同 sigma。
         """
-        return self.simulation.Jtvec(np.asarray(sigma, dtype=float),
+        return self.simulation.Jtvec(self._as_flat_model(sigma),
                                      np.asarray(v, dtype=float))
+
+    # ------------------------------------------------------------------ #
+    # 1d_tensor 层状参数 → 网格 sigma 映射
+    # ------------------------------------------------------------------ #
+    def _assign_layers(self, z_centers: np.ndarray) -> np.ndarray:
+        """根据 cell 中心 z 坐标确定所属层号。
+
+        层界面深度由 _layer_boundaries 定义（从地表 z=0 向下累积）。
+        网格 z 轴向上为正，因此需要将 z_centers 转换为深度。
+
+        Args:
+            z_centers: 网格单元中心 z 坐标数组 (m)。
+
+        Returns:
+            层索引数组，范围 [0, n_layers-1]。
+        """
+        # 网格 z 向上为正，深度 = -z（假定地表在 z=0）
+        depths = -z_centers
+        # searchsorted: 找到每个 depth 属于哪一层
+        # boundaries = [0, h1, h1+h2, ...]  共 n_layers 个边界
+        idx = np.searchsorted(self._layer_boundaries, depths, side='right') - 1
+        # 裁剪到合法范围
+        n_layers = len(self._layer_thicknesses) + 1
+        return np.clip(idx, 0, n_layers - 1)
+
+    def _build_sigma_from_layers_1d(self, m: np.ndarray) -> np.ndarray:
+        """将 1D 层状模型参数映射到 3D 网格的 sigma 数组。
+
+        Args:
+            m: 模型参数向量。各向同性时 shape=(n_layers,)，
+                各向异性时 shape=(n_layers*2,)，前半为 σh 后半为 σv。
+
+        Returns:
+            各向同性: shape (n_cells,) 的 sigma 数组。
+            各向异性: shape (n_cells, 3) 的 sigma 数组 [σh, σh, σv]；
+            调用方（``dpred``）会将其 C 序展平为 (n_cells*3,) 后交给
+            simulation，形状还原由 ``_AnisotropicSigmaMap`` 完成。
+        """
+        m = np.asarray(m, dtype=float)
+        n_layers = len(self._layer_thicknesses) + 1
+        if self._anisotropic:
+            sigma_h = m[:n_layers]
+            sigma_v = m[n_layers:]
+        else:
+            sigma_h = m
+            sigma_v = m  # 未使用
+
+        z_centers = self.mesh.cell_centers[:, 2]
+        layer_idx = self._assign_layers(z_centers)
+
+        if self._anisotropic:
+            sigma = np.zeros((self.mesh.n_cells, 3))
+            sigma[:, 0] = sigma_h[layer_idx]
+            sigma[:, 1] = sigma_h[layer_idx]
+            sigma[:, 2] = sigma_v[layer_idx]
+        else:
+            sigma = sigma_h[layer_idx]
+        return sigma
 
     # ------------------------------------------------------------------ #
     # 数据整形与绘图

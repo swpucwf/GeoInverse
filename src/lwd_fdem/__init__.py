@@ -25,6 +25,7 @@ from .inversion import LWDFDEMInversion
 from .meshes import (
     build_1d_mesh,
     build_2d_cyl_mesh,
+    build_2d_tensor_mesh,
     build_3d_tensor_mesh,
     mesh_quality_report,
     recommend_cell_size,
@@ -46,7 +47,8 @@ from .plotting import (
     t,
     LBL,
 )
-from .survey import LWDToolConfig, build_receivers, build_survey, data_order
+from .survey import (LWDToolConfig, build_receivers, build_survey,
+                     build_survey_tilted, data_order, rotation_matrix)
 from .tensor import (build_tensor_receivers, build_tensor_survey,
                      tensor_data_order)
 
@@ -54,7 +56,9 @@ __all__ = [
     "LWDToolConfig",
     "build_survey",
     "build_receivers",
+    "build_survey_tilted",
     "data_order",
+    "rotation_matrix",
     "build_tensor_receivers",
     "build_tensor_survey",
     "tensor_data_order",
@@ -64,6 +68,7 @@ __all__ = [
     "recommend_cell_size",
     "build_1d_mesh",
     "build_2d_cyl_mesh",
+    "build_2d_tensor_mesh",
     "build_3d_tensor_mesh",
     "mesh_quality_report",
     "add_synthetic_noise",

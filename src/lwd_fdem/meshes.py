@@ -67,6 +67,23 @@ def recommend_cell_size(frequencies: Sequence[float], conductivities: Sequence[f
     return delta_min / divisor
 
 
+def _add_padding(h_core: np.ndarray, n_pad: int, pad_factor: float) -> np.ndarray:
+    """为核心区单元宽度数组两侧添加等比递增 padding。
+
+    Args:
+        h_core: 核心区单元宽度 1D 数组 (m)。
+        n_pad: 每侧 padding 层数。
+        pad_factor: padding 等比放大因子 (>1)。
+
+    Returns:
+        含 padding 的完整单元宽度 1D 数组。
+    """
+    dh = h_core[0]
+    pad_left = dh * pad_factor ** np.arange(n_pad, 0, -1)
+    pad_right = dh * pad_factor ** np.arange(1, n_pad + 1)
+    return np.concatenate([pad_left, h_core, pad_right])
+
+
 def build_1d_mesh(layer_thicknesses: Sequence[float]) -> TensorMesh:
     """为 1D 层状模型构建用于正则化的张量网格。
 
@@ -170,6 +187,67 @@ def build_3d_tensor_mesh(
     # 记录核心区单元宽度，供 mesh_quality_report 校核
     mesh._lwd_core_widths = (np.full(nx, cell_size), np.full(ny, cell_size),
                              np.full(nz, cell_size))
+    return mesh
+
+
+def build_2d_tensor_mesh(
+    core_extent_xz: Tuple[float, float],
+    cell_size: Optional[float] = None,
+    frequencies: Optional[Sequence[float]] = None,
+    conductivities: Optional[Sequence[float]] = None,
+    relative_permittivity: float = 1.0,
+    n_pad: int = 6,
+    pad_factor: float = 1.3,
+    ny: int = 3,
+) -> TensorMesh:
+    """构建 2.5D 像素级反演用的薄 TensorMesh。
+
+    x-z 平面为核心反演区域，y 方向仅 ny 个 cell（薄切片）。
+    正演为完整 3D FVM 求解，但模型参数仅在 x-z 平面独立，
+    y 方向通过映射复制，实现"3D 正演 + 2D 反演"的 2.5D 范式。
+
+    Args:
+        core_extent_xz: (dx, dz) 核心区 x 和 z 方向总尺寸 (m)。
+        cell_size: 核心区单元尺寸 (m)。若为 None 则自动推荐。
+        frequencies: 工作频率列表 (Hz)，用于自动推荐 cell_size。
+        conductivities: 电导率范围 (S/m)，用于自动推荐 cell_size。
+        relative_permittivity: 相对介电常数，默认 1.0。
+        n_pad: 每侧 padding 层数。
+        pad_factor: padding 等比放大因子。
+        ny: y 方向 cell 数量，默认 3（薄切片）。
+
+    Returns:
+        TensorMesh 实例，origin="CCC"（源在网格几何中心）。
+    """
+    dx, dz = core_extent_xz
+    if cell_size is None:
+        if frequencies is None or conductivities is None:
+            raise ValueError(
+                "cell_size 为 None 时必须提供 frequencies 和 conductivities"
+            )
+        cell_size = recommend_cell_size(
+            frequencies, conductivities, relative_permittivity
+        )
+
+    nx_core = max(int(np.ceil(dx / cell_size)), 4)
+    nz_core = max(int(np.ceil(dz / cell_size)), 4)
+
+    # x 和 z 方向：核心区 + padding
+    hx_core = np.ones(nx_core) * cell_size
+    hz_core = np.ones(nz_core) * cell_size
+    hx = _add_padding(hx_core, n_pad, pad_factor)
+    hz = _add_padding(hz_core, n_pad, pad_factor)
+
+    # y 方向：与核心区相同宽度但仅 ny 个 cell（薄切片）
+    hy = np.ones(ny) * cell_size
+
+    mesh = TensorMesh([hx, hy, hz], origin="CCC")
+    # 记录核心区单元宽度，供 mesh_quality_report 校核
+    mesh._lwd_core_widths = (
+        np.full(nx_core, cell_size),
+        np.full(ny, cell_size),
+        np.full(nz_core, cell_size),
+    )
     return mesh
 
 

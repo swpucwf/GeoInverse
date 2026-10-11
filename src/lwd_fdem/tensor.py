@@ -16,7 +16,7 @@ import numpy as np
 from ..fdemcore.electromagnetics.frequency_domain import receivers as _rx
 from ..fdemcore.electromagnetics.frequency_domain import sources as _src
 from ..fdemcore.electromagnetics.frequency_domain import Survey
-from ..fdemcore.utils import validate_string
+from ..fdemcore.utils import validate_string, validate_ndarray_with_shape
 from .survey import _RX_CLASSES, _SUPPORTED, _receiver_location
 
 # 默认三轴取向
@@ -65,7 +65,11 @@ def build_tensor_receivers(
             f"与离散形式 {form!r} 不兼容。"
         )
     for ori in rx_orientations:
-        validate_string("rx_orientations", ori, string_list=("x", "y", "z"))
+        if isinstance(ori, str):
+            validate_string("rx_orientations", ori, string_list=("x", "y", "z"))
+        else:
+            validate_ndarray_with_shape("rx_orientations", ori,
+                                        shape=(3,), dtype=float)
 
     rx_cls = _RX_CLASSES[key]
     receiver_list = []
@@ -124,7 +128,11 @@ def build_tensor_survey(
         ValueError: 参数不合法时。
     """
     for ori in src_orientations:
-        validate_string("src_orientations", ori, string_list=("x", "y", "z"))
+        if isinstance(ori, str):
+            validate_string("src_orientations", ori, string_list=("x", "y", "z"))
+        else:
+            validate_ndarray_with_shape("src_orientations", ori,
+                                        shape=(3,), dtype=float)
 
     receiver_list = build_tensor_receivers(
         spacings=spacings,

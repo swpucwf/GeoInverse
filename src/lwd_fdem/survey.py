@@ -15,7 +15,7 @@ import numpy as np
 from ..fdemcore.electromagnetics import frequency_domain as fdem
 from ..fdemcore.electromagnetics.frequency_domain import receivers as _rx
 from ..fdemcore.electromagnetics.frequency_domain import sources as _src
-from ..fdemcore.utils import validate_string
+from ..fdemcore.utils import validate_string, validate_float
 
 # 各离散形式 Fields 支持的投影场（源：frequency_domain/fields.py 的 _GLoc 与 1D 解析）
 # key: 形式, value: 允许的 (field, secondary) 组合
@@ -36,6 +36,42 @@ _RX_CLASSES = {
     ("h", True): _rx.PointMagneticFieldSecondary,
     ("j", False): _rx.PointCurrentDensity,
 }
+
+
+def rotation_matrix(inclination: float, azimuth: float, tool_face: float = 0.0) -> np.ndarray:
+    """构建仪器坐标系到地层坐标系的旋转矩阵。
+
+    旋转顺序为 R = Ry(inclination) @ Rz(azimuth) @ Rz(tool_face)，
+    其中 Ry 绕 y 轴（井斜），Rz 绕 z 轴（方位/工具面）。
+
+    Args:
+        inclination: 井斜角（度），0 表示垂直向下，90 表示水平。
+        azimuth: 方位角（度），0 表示正北，90 表示正东。
+        tool_face: 工具面角（度），绕井轴旋转，默认 0。
+
+    Returns:
+        3x3 正交旋转矩阵，列向量为仪器坐标系各轴在地层坐标系中的方向余弦。
+    """
+    inc = np.radians(inclination)
+    azi = np.radians(azimuth)
+    tf = np.radians(tool_face)
+
+    # Ry(inclination): 井斜旋转
+    Ry = np.array([
+        [np.cos(inc), 0.0, np.sin(inc)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(inc), 0.0, np.cos(inc)]
+    ])
+
+    # Rz(azimuth + tool_face): 方位与工具面旋转合并
+    angle = azi + tf
+    Rz = np.array([
+        [np.cos(angle), -np.sin(angle), 0.0],
+        [np.sin(angle), np.cos(angle), 0.0],
+        [0.0, 0.0, 1.0]
+    ])
+
+    return Ry @ Rz
 
 
 @dataclass
@@ -165,6 +201,9 @@ class LWDToolConfig:
     source_type: str = "mag_dipole"
     loop_radius: float = 0.05
     source_location: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    inclination: float = 0.0
+    azimuth: float = 0.0
+    tool_face: float = 0.0
 
     def __post_init__(self) -> None:
         """校验配置合法性。"""
@@ -186,11 +225,35 @@ class LWDToolConfig:
                         string_list=("axial", "radial"))
         validate_string("source_type", self.source_type,
                         string_list=("mag_dipole", "circular_loop"))
+        validate_float("inclination", self.inclination, min_val=0.0, max_val=180.0)
+        validate_float("azimuth", self.azimuth, min_val=0.0, max_val=360.0)
+        validate_float("tool_face", self.tool_face, min_val=0.0, max_val=360.0)
         if self.field_kind == "e" and self.secondary:
             raise ValueError("电场接收器仅支持总场（secondary=False）。")
         if self.receiver_geometry == "radial" and self.orientation == "z":
             # 径向偏移 + z 取向偶极子在 1D/轴对称中均合法，无需拦截
             pass
+
+    @property
+    def orientation_vector(self) -> np.ndarray:
+        """工具轴方向向量（单位向量，地层坐标系）。
+
+        姿态角全零时退化为 orientation 字符串对应的单位向量；
+        否则从旋转矩阵提取工具 z 轴方向。
+        """
+        if (self.inclination == 0.0 and self.azimuth == 0.0
+                and self.tool_face == 0.0):
+            mapping = {"x": np.r_[1.0, 0.0, 0.0],
+                       "y": np.r_[0.0, 1.0, 0.0],
+                       "z": np.r_[0.0, 0.0, 1.0]}
+            return mapping[self.orientation]
+        R = self.rotation_matrix
+        return R[:, 2]  # 工具 z 轴在地层坐标系中的方向
+
+    @property
+    def rotation_matrix(self) -> np.ndarray:
+        """完整 3x3 旋转矩阵 R = Ry(inc) @ Rz(azi + tf)。"""
+        return rotation_matrix(self.inclination, self.azimuth, self.tool_face)
 
 
 def _receiver_location(cfg: LWDToolConfig, spacing: float) -> np.ndarray:
@@ -198,6 +261,32 @@ def _receiver_location(cfg: LWDToolConfig, spacing: float) -> np.ndarray:
     if cfg.receiver_geometry == "axial":
         return np.array([0.0, 0.0, spacing])
     return np.array([spacing, 0.0, 0.0])
+
+
+def _receiver_location_tilted(cfg: LWDToolConfig, spacing: float) -> np.ndarray:
+    """计算倾斜仪器的接收器位置（考虑工具姿态角）。
+
+    姿态角全零时退化为 _receiver_location 的行为；
+    姿态角非零时沿倾斜后的工具轴或垂直方向偏移。
+
+    Args:
+        cfg: 仪器配置（含 inclination/azimuth/tool_face）。
+        spacing: 收发距 (m)。
+
+    Returns:
+        接收器全局坐标 (3,)。
+    """
+    src_loc = np.array(cfg.source_location, dtype=float)
+    ori = cfg.orientation_vector
+    if cfg.receiver_geometry == "axial":
+        return src_loc + spacing * ori
+    else:  # radial
+        if abs(ori[0]) < 0.9:
+            perp = np.cross(ori, np.r_[1.0, 0.0, 0.0])
+        else:
+            perp = np.cross(ori, np.r_[0.0, 1.0, 0.0])
+        perp = perp / np.linalg.norm(perp)
+        return src_loc + spacing * perp
 
 
 def build_receivers(cfg: LWDToolConfig, form: str) -> List:
@@ -263,3 +352,77 @@ def build_survey(cfg: LWDToolConfig, form: str) -> fdem.Survey:
 def data_order(cfg: LWDToolConfig) -> Tuple[int, int, int]:
     """返回数据向量的 (n_freq, n_spacing, n_comp) 结构，供 reshape 使用。"""
     return (len(cfg.frequencies), len(cfg.spacings), len(cfg.components))
+
+
+# ------------------------------------------------------------------ #
+# 倾斜仪器独立路径（新接口，不影响 build_survey / build_receivers）
+# ------------------------------------------------------------------ #
+
+
+def build_receivers_tilted(cfg: LWDToolConfig, form: str) -> List:
+    """构建倾斜仪器的接收器列表（使用 orientation_vector 与位置偏移）。
+
+    与 build_receivers 完全独立，使用 cfg.orientation_vector 代替字符串
+    orientation，并用 _receiver_location_tilted 计算接收器位置。
+
+    Args:
+        cfg: 仪器配置（含 inclination/azimuth/tool_face）。
+        form: 离散形式，'e'/'b'/'h'/'j'。
+
+    Returns:
+        接收器对象列表。
+
+    Raises:
+        ValueError: 接收器与离散形式不兼容时。
+    """
+    key = (cfg.field_kind, cfg.secondary)
+    if key not in _SUPPORTED[form]:
+        raise ValueError(
+            f"接收器 (field={cfg.field_kind!r}, secondary={cfg.secondary!r}) "
+            f"与离散形式 {form!r} 不兼容。"
+        )
+    rx_cls = _RX_CLASSES[key]
+    receiver_list = []
+    for spacing in cfg.spacings:
+        loc = _receiver_location_tilted(cfg, float(spacing))
+        for comp in cfg.components:
+            receiver_list.append(
+                rx_cls(loc, orientation=cfg.orientation_vector,
+                       component=comp, data_type=cfg.data_type)
+            )
+    return receiver_list
+
+
+def build_survey_tilted(cfg: LWDToolConfig, form: str) -> fdem.Survey:
+    """构建倾斜仪器的多频率 Survey（独立于 build_survey）。
+
+    使用 cfg.orientation_vector 作为源和接收器的方向向量，
+    fdemcore 的 validate_direction 原生支持 ndarray 输入。
+
+    Args:
+        cfg: 仪器配置（含 inclination/azimuth/tool_face）。
+        form: 离散形式，'e'/'b'/'h'/'j'。
+
+    Returns:
+        fdem.Survey 对象，数据排列顺序为 频率 -> 收发距 -> 分量。
+    """
+    receiver_list = build_receivers_tilted(cfg, form)
+    source_list = []
+    ori_vec = cfg.orientation_vector
+    src_loc = np.asarray(cfg.source_location, dtype=float)
+    for freq in cfg.frequencies:
+        if cfg.source_type == "mag_dipole":
+            source_list.append(
+                _src.MagDipole(receiver_list, frequency=float(freq),
+                               location=src_loc,
+                               orientation=ori_vec,
+                               moment=cfg.moment)
+            )
+        else:
+            source_list.append(
+                _src.CircularLoop(receiver_list, frequency=float(freq),
+                                  location=src_loc,
+                                  orientation=ori_vec,
+                                  radius=cfg.loop_radius)
+            )
+    return fdem.Survey(source_list)

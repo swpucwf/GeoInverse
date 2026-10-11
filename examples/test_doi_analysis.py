@@ -156,6 +156,67 @@ def test_doi_summary():
     return True
 
 
+def test_doi_visualization():
+    """Test 5: DOI 可视化。"""
+    print("[Test 5] DOI 可视化")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    sigma = np.array([0.25, 0.01, 0.5])
+    thicknesses = np.array([2.0, 4.0])
+
+    tool = LWDToolConfig(
+        frequencies=(1e4, 1e5),
+        spacings=np.array([0.5, 1.0]),
+        components=("real", "imag"),
+        field_kind="h",
+        secondary=False,
+        receiver_geometry="radial",
+    )
+
+    fwd = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
+
+    # DOI 分析
+    doi_result = doi_1d_sensitivity(fwd, sigma, threshold_ratio=0.1)
+    R = doi_resolution_matrix(fwd, sigma, beta=1.0, alpha=1e-3)
+
+    # 绘图
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+    # 左图：灵敏度对角元
+    axes[0].bar(range(len(sigma)), doi_result["sensitivity"], color="steelblue")
+    axes[0].set_xlabel("Layer index")
+    axes[0].set_ylabel("Sensitivity")
+    axes[0].set_title("Layer sensitivity")
+    axes[0].set_yscale("log")
+    axes[0].grid(True, alpha=0.3)
+
+    # 中图：分辨率矩阵
+    im1 = axes[1].imshow(R, cmap="Blues", vmin=0, vmax=1)
+    axes[1].set_xlabel("Parameter index")
+    axes[1].set_ylabel("Parameter index")
+    axes[1].set_title("Resolution matrix R")
+    plt.colorbar(im1, ax=axes[1])
+
+    # 右图：DOI 深度示意
+    depths = doi_result["cumulative_depths"]
+    reliable = doi_result["reliable_mask"]
+    colors = ["green" if r else "red" for r in reliable]
+    axes[2].barh(range(len(depths)), depths, color=colors, alpha=0.6)
+    axes[2].set_xlabel("Cumulative depth (m)")
+    axes[2].set_ylabel("Layer index")
+    axes[2].set_title(f"DOI depth: {doi_result['doi_depth']:.1f} m")
+    axes[2].grid(True, alpha=0.3, axis="x")
+
+    plt.tight_layout()
+    filepath = os.path.join(FIG_DIR, "doi_analysis.png")
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  图版已保存: {filepath} [OK]")
+    return True
+
+
 def main():
     print("=" * 60)
     print("E9 测试：DOI 探测深度分析")
@@ -166,6 +227,7 @@ def main():
         test_doi_skin_depth,
         test_doi_resolution_matrix,
         test_doi_summary,
+        test_doi_visualization,
     ]
 
     passed = 0

@@ -148,6 +148,58 @@ def test_error_handling():
     return True
 
 
+def test_apparent_visualization():
+    """Test 5: 视电阻率可视化。"""
+    print("[Test 5] 视电阻率可视化")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # 半空间模型
+    sigma_true = 0.1
+    freqs = np.array([1e3, 1e4, 1e5, 1e6])
+    spacings = np.array([0.3, 0.6, 1.0, 1.5])
+
+    # 用解析解计算数据
+    from src.fdemcore.electromagnetics.analytics import hzAnalyticDipoleF
+    data_mat = np.zeros((len(freqs), len(spacings)))
+    for i, f in enumerate(freqs):
+        for j, r in enumerate(spacings):
+            hz = hzAnalyticDipoleF(r, np.array([f]), sigma_true,
+                                    secondary=False).flatten()[0]
+            data_mat[i, j] = abs(hz)
+
+    # 批量转换
+    sigma_a_mat = apparent_resistivity_matrix(freqs, spacings, data_mat,
+                                               component="real")
+
+    # 绘图
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    # 左图：数据矩阵
+    im0 = axes[0].imshow(np.log10(data_mat), aspect="auto", origin="lower",
+                         cmap="viridis")
+    axes[0].set_xlabel("Spacing index")
+    axes[0].set_ylabel("Frequency index")
+    axes[0].set_title("Hz amplitude (log10)")
+    plt.colorbar(im0, ax=axes[0])
+
+    # 右图：视电阻率矩阵
+    im1 = axes[1].imshow(np.log10(sigma_a_mat), aspect="auto", origin="lower",
+                         cmap="plasma")
+    axes[1].set_xlabel("Spacing index")
+    axes[1].set_ylabel("Frequency index")
+    axes[1].set_title(f"Apparent σ (log10), true={sigma_true}")
+    plt.colorbar(im1, ax=axes[1])
+
+    plt.tight_layout()
+    filepath = os.path.join(FIG_DIR, "apparent_resistivity.png")
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  图版已保存: {filepath} [OK]")
+    return True
+
+
 def main():
     print("=" * 60)
     print("E5 测试：视电阻率转换")
@@ -158,6 +210,7 @@ def main():
         test_apparent_matrix,
         test_apparent_from_forward,
         test_error_handling,
+        test_apparent_visualization,
     ]
 
     passed = 0

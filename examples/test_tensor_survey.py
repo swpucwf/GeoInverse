@@ -131,6 +131,65 @@ def test_original_survey_unchanged():
     return True
 
 
+def test_tensor_survey_visualization():
+    """Test 6: 张量 survey 可视化。"""
+    print("[Test 6] 张量 survey 可视化")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # 构建三轴源 × 三轴接收 survey
+    survey = build_tensor_survey(
+        frequencies=(1e4, 1e5),
+        spacings=np.array([0.5, 1.0]),
+        field_kind="h",
+        secondary=False,
+        components=("real", "imag"),
+        rx_orientations=("x", "y", "z"),
+        src_orientations=("x", "y", "z"),
+        form="h",
+    )
+
+    fig, axes = plt.subplots(2, 3, figsize=(12, 6))
+    fig.suptitle("Tensor Survey Layout (3-axis src × 3-axis rx)", fontsize=14)
+
+    for i, src in enumerate(survey.source_list):
+        ax = axes[i // 3, i % 3]
+        src_ori = src.orientation
+        if isinstance(src_ori, np.ndarray):
+            src_ori = tuple(src_ori.tolist())
+        ax.set_title(f"Src {i}: ori={src_ori}")
+
+        # 绘制接收器位置
+        rx_positions = []
+        rx_labels = []
+        for rx in src.receiver_list:
+            loc = rx.locations[0]
+            rx_positions.append(loc)
+            ori = rx.orientation
+            if isinstance(ori, np.ndarray):
+                ori = tuple(ori.tolist())
+            rx_labels.append(str(ori))
+
+        rx_positions = np.array(rx_positions)
+        ax.scatter(rx_positions[:, 0], rx_positions[:, 1], c=rx_positions[:, 2],
+                   cmap="viridis", s=50, alpha=0.7)
+        for pos, label in zip(rx_positions, rx_labels):
+            ax.annotate(label, (pos[0], pos[1]), fontsize=6, ha="center", va="bottom")
+
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+        ax.set_aspect("equal")
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    filepath = os.path.join(FIG_DIR, "tensor_survey_layout.png")
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  图版已保存: {filepath} [OK]")
+    return True
+
+
 def test_error_handling():
     """Test 6: 错误处理。"""
     print("[Test 6] 错误处理")
@@ -174,6 +233,7 @@ def main():
         test_single_orientation_degenerate,
         test_original_survey_unchanged,
         test_error_handling,
+        test_tensor_survey_visualization,
     ]
 
     passed = 0
@@ -185,7 +245,9 @@ def main():
             else:
                 failed += 1
         except Exception as e:
+            import traceback
             print(f"  异常: {e}")
+            traceback.print_exc()
             failed += 1
 
     print()

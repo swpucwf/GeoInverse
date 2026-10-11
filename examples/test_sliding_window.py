@@ -229,6 +229,81 @@ def test_end_to_end():
     return True
 
 
+def test_sliding_window_visualization():
+    """Test 5: 滑动窗口可视化。"""
+    print("[Test 5] 滑动窗口可视化")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # 真实模型
+    sigma_true = np.array([0.25, 0.01, 0.5])
+    thicknesses = np.array([2.0, 4.0])
+
+    tool = LWDToolConfig(
+        frequencies=(1e4, 1e5),
+        spacings=np.array([0.5, 1.0]),
+        components=("real", "imag"),
+        field_kind="h",
+        secondary=False,
+        receiver_geometry="radial",
+    )
+
+    # 生成 5 个深度位置的数据
+    n_depths = 5
+    depths = np.arange(n_depths) * 1.0
+
+    fwd_template = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
+    d_template = fwd_template.dpred(sigma_true)
+    nD = len(d_template)
+
+    data_at_depths = np.zeros((n_depths, nD))
+    for i in range(n_depths):
+        data_at_depths[i] = d_template.copy()
+
+    # 执行滑动窗口反演
+    builder = simple_window_builder(tool, thicknesses, n_layers=3)
+    runner = simple_inversion_runner(max_iter=10)
+
+    result = sliding_window_inversion_1d(
+        depths=depths,
+        data_at_depths=data_at_depths,
+        forward_builder=builder,
+        inversion_runner=runner,
+        window_size=3,
+        step=1,
+        verbose=False,
+    )
+
+    # 绘图
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    # 左图：反演电阻率剖面
+    models = result["models"]
+    for j in range(3):  # 3 layers
+        axes[0].plot(depths, models[:, j], "o-", label=f"Layer {j+1}")
+    axes[0].set_xlabel("Depth (m)")
+    axes[0].set_ylabel("σ (S/m)")
+    axes[0].set_title("Sliding window inversion profile")
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    # 右图：拟合差
+    axes[1].plot(depths, result["misfits"], "s-", color="red")
+    axes[1].set_xlabel("Depth (m)")
+    axes[1].set_ylabel("Misfit φ_d")
+    axes[1].set_title("Data misfit vs depth")
+    axes[1].set_yscale("log")
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    filepath = os.path.join(FIG_DIR, "sliding_window_profile.png")
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  图版已保存: {filepath} [OK]")
+    return True
+
+
 def main():
     print("=" * 60)
     print("E10 测试：滑动窗口反演")
@@ -239,6 +314,7 @@ def main():
         test_simple_window_builder,
         test_simple_inversion_runner,
         test_end_to_end,
+        test_sliding_window_visualization,
     ]
 
     passed = 0

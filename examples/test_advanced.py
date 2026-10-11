@@ -168,6 +168,57 @@ def test_sensitivity_diagonal():
     return True
 
 
+def test_sensitivity_visualization():
+    """Test 5: 灵敏度矩阵可视化。"""
+    print("[Test 5] 灵敏度矩阵可视化")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    sigma = np.array([0.25, 0.01, 0.5])
+    thicknesses = np.array([2.0, 4.0])
+
+    tool = LWDToolConfig(
+        frequencies=(1e4, 1e5),
+        spacings=np.array([0.5, 1.0]),
+        components=("real", "imag"),
+        field_kind="h",
+        secondary=False,
+        receiver_geometry="radial",
+    )
+
+    fwd = LWDFDEMForward("1d", tool, layer_thicknesses=thicknesses)
+
+    # 计算灵敏度矩阵
+    J = compute_sensitivity_matrix(fwd, sigma)
+    diag = compute_sensitivity_diagonal(fwd, sigma)
+
+    # 绘图
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    # 左图：J 矩阵
+    im0 = axes[0].imshow(J, aspect="auto", cmap="RdBu_r")
+    axes[0].set_xlabel("Parameter index")
+    axes[0].set_ylabel("Data index")
+    axes[0].set_title(f"Sensitivity matrix J ({J.shape})")
+    plt.colorbar(im0, ax=axes[0])
+
+    # 右图：对角元柱状图
+    axes[1].bar(range(len(diag)), diag, color="steelblue")
+    axes[1].set_xlabel("Parameter index")
+    axes[1].set_ylabel("JᵀJ diagonal")
+    axes[1].set_title("Sensitivity diagonal (memory-friendly)")
+    axes[1].set_yscale("log")
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    filepath = os.path.join(FIG_DIR, "sensitivity_matrix.png")
+    plt.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  图版已保存: {filepath} [OK]")
+    return True
+
+
 def main():
     print("=" * 60)
     print("E6+E7+E8 测试：LAS导出、并行频率、灵敏度矩阵")
@@ -178,6 +229,7 @@ def main():
         test_parallel_frequencies,
         test_sensitivity_matrix,
         test_sensitivity_diagonal,
+        test_sensitivity_visualization,
     ]
 
     passed = 0

@@ -132,7 +132,7 @@ def fig_A_source_compare(mesh):
             title=T("(a) 磁偶极子(实) vs 回线(虚)", "(a) dipole (solid) vs loop (dashed)"))
     ax1.legend(fontsize=6.5, ncol=2)
     ax2.axvline(0, color="k", lw=0.8, ls="--")
-    ax2.set_xlim(-23.5, -18.5)  # 进一步缩小区间，曲线更分散
+    ax2.set_xlim(-30, -15)
     ax2.set(xlabel=T("相对差异 (%)", "Relative diff (%)"),
             ylabel=T("仪器深度 (m)", "Tool depth (m)"),
             title=T("(b) 回线相对偶极子差异", "(b) loop vs dipole difference"))

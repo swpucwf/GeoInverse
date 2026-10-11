@@ -39,12 +39,17 @@ from .plotting import (
     LBL,
 )
 from .survey import LWDToolConfig, build_receivers, build_survey, data_order
+from .tensor import (build_tensor_receivers, build_tensor_survey,
+                     tensor_data_order)
 
 __all__ = [
     "LWDToolConfig",
     "build_survey",
     "build_receivers",
     "data_order",
+    "build_tensor_receivers",
+    "build_tensor_survey",
+    "tensor_data_order",
     "LWDFDEMForward",
     "LWDFDEMInversion",
     "skin_depth",

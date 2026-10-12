@@ -25,19 +25,18 @@ paper/
 ├── paper2_lwd_fdem.py      # 论文2 敏感性复现（lwd_fdem 版本）
 ├── paper2_simpeg.py        # 论文2 敏感性复现（SimPEG 版本）
 ├── compare_results.py      # 两版本数据对比脚本
+├── paper1_lwd_fdem.npz     # 运行后生成，供 compare_results.py 加载
+├── paper1_simpeg.npz
+├── paper2_lwd_fdem.npz
+├── paper2_simpeg.npz
 └── figs/                   # 输出图件（PNG, dpi=150）
 ```
-
-运行后还会生成 `paper1_lwd_fdem.npz` / `paper1_simpeg.npz` /
-`paper2_lwd_fdem.npz` / `paper2_simpeg.npz` 供 `compare_results.py` 加载。
 
 ---
 
 ## 环境与运行
 
-Python 环境：`C:\Users\c1953\.conda\envs\lwd\python.exe`（工作目录 `e:\GeoInverse`）。
-
-每个脚本均可独立运行，支持两档模式：
+需要已安装项目依赖的 Python 环境（见仓库根目录 `requirements.txt`）。每个脚本均可独立运行，支持两档模式：
 
 - `--quick`（默认）：粗网格 + 代表频点 + 少量扫描点，秒级—分钟级完成，用于演示与对比验证；
 - `--full`：接近论文精度的细网格与完整频率 / 扫描序列，计算量大（数十分钟至数小时），
@@ -47,17 +46,17 @@ Python 环境：`C:\Users\c1953\.conda\envs\lwd\python.exe`（工作目录 `e:\G
 
 ### 推荐执行顺序
 
-```bat
-:: 论文1（各约 15 s，quick 档）
-C:\Users\c1953\.conda\envs\lwd\python.exe paper\paper1_lwd_fdem.py --quick
-C:\Users\c1953\.conda\envs\lwd\python.exe paper\paper1_simpeg.py   --quick
+```bash
+# 论文1（各约 15 s，quick 档）
+python paper/paper1_lwd_fdem.py --quick
+python paper/paper1_simpeg.py   --quick
 
-:: 论文2（各约 17 s，quick 档）
-C:\Users\c1953\.conda\envs\lwd\python.exe paper\paper2_lwd_fdem.py --quick
-C:\Users\c1953\.conda\envs\lwd\python.exe paper\paper2_simpeg.py   --quick
+# 论文2（各约 17 s，quick 档）
+python paper/paper2_lwd_fdem.py --quick
+python paper/paper2_simpeg.py   --quick
 
-:: 两版本对比
-C:\Users\c1953\.conda\envs\lwd\python.exe paper\compare_results.py
+# 两版本对比
+python paper/compare_results.py
 ```
 
 `compare_results.py` 会加载上述 `.npz`，逐分量计算相对误差并输出 PASS/FAIL 汇总表，
@@ -103,6 +102,8 @@ C:\Users\c1953\.conda\envs\lwd\python.exe paper\compare_results.py
 **输出图件**：`figs/paper1_lwd_attenuation.png`、`figs/paper1_lwd_att_vs_depth.png`、
 `figs/paper1_simpeg_attenuation.png`。
 
+论文1 两版本衰减比散点对比与差值直方图：`figs/compare_paper1.png`。
+
 ---
 
 ## 论文2：Knowledge-guided deep learning inversion of EM look-ahead LWD data
@@ -131,6 +132,8 @@ C:\Users\c1953\.conda\envs\lwd\python.exe paper\compare_results.py
 **输出图件**：`figs/paper2_lwd_components.png`、`figs/paper2_lwd_sensitivity.png`、
 `figs/paper2_simpeg_components.png`、`figs/paper2_simpeg_sensitivity.png`。
 
+论文2 两版本主分量重叠对比：`figs/compare_paper2.png`。
+
 ---
 
 ## 计算效率与网格说明
@@ -156,10 +159,10 @@ C:\Users\c1953\.conda\envs\lwd\python.exe paper\compare_results.py
 
 ## 约束遵守
 
-- 不修改 `src/fdemcore/` 与 `src/lwd_fdem/` 下任何文件；
-- SimPEG 版本仅通过 `sys.path` 导入 `external/simpeg-main`，未 pip install；
-  因归档缺少构建期生成的 `simpeg/version.py`，脚本在导入前注入占位模块
-  `sys.modules["simpeg.version"]`（仅进程内生效，不写盘、不改动归档）；
-- 聚焦正演物理模型与敏感性分析，未实现 DL 反演部分。
+- 不修改 `src/fdemcore/` 与 `src/lwd_fdem/` 下任何文件。
+- SimPEG 版本仅通过 `sys.path` 导入 `external/simpeg-main`，不 pip install。
+  归档缺少构建期生成的 `simpeg/version.py`，脚本在导入前注入占位模块
+  （仅进程内生效，不写盘、不改动归档）。
+- 仅复现正演物理模型与敏感性分析，DL 反演不在范围内。
 
 Copyright 2026 LWD-EM-Inv Team (Apache-2.0)

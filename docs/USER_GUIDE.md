@@ -16,7 +16,8 @@
 7. [步骤 4：合成数据与反演](#7-步骤-4合成数据与反演)
 8. [步骤 5：可视化与出图](#8-步骤-5可视化与出图)
 9. [进阶用法](#9-进阶用法)
-10. [示例脚本索引](#10-示例脚本索引)
+10. [高级分析功能](#10-高级分析功能)
+11. [示例脚本索引](#11-示例脚本索引)
 
 ---
 
@@ -60,11 +61,13 @@ pytest -m "not slow"    # 快速回归测试
 │  ┌──────────┬──────────┬──────────┬───────────┐ │
 │  │ survey   │ meshes   │ forward  │ inversion │ │
 │  │ 仪器配置  │ 网格生成  │ 正演入口  │ 反演管线   │ │
-│  └──────────┴──────────┴──────────┴───────────┘ │
-│  ┌──────────┬──────────┬───────────┐            │
-│  │ dataio   │ plotting │ analytics │            │
-│  │ 数据读写  │ 可视化    │ 解析解     │            │
-│  └──────────┴──────────┴───────────┘            │
+│  ├──────────┼──────────┼──────────┼───────────┤ │
+│  │ tensor   │ advanced │ apparent │ doi       │ │
+│  │ 张量观测  │ 灵敏度/并行│ 视电阻率 │ 探测深度   │ │
+│  ├──────────┼──────────┴──────────┴───────────┤ │
+│  │ window   │ dataio   │ plotting             │ │
+│  │ 滑动窗口 │ 数据读写  │ 可视化                 │ │
+│  └──────────┴──────────┴──────────────────────┘ │
 ├─────────────────────────────────────────────────┤
 │  fdemcore 计算核心（SimPEG 精简派生，独立运行）     │
 │  FDEM simulation / maps / regularization / ...   │
@@ -75,8 +78,10 @@ pytest -m "not slow"    # 快速回归测试
 
 | 几何 | 求解器 | 速度 | 适用场景 |
 |------|--------|------|---------|
-| **1D 层状** | Hankel 解析解 | 最快（毫秒级） | 垂直井层状地层近似 |
+| **1D 层状** | Hankel 解析解 | 最快（毫秒级） | 垂直井/水平井层状地层近似 |
+| **1D 张量** | 1D 层状参数化 + 3D FVM | 中等 | 层状模型但需 VTI 各向异性或倾斜井时 |
 | **2D 轴对称** | CylindricalMesh FVM | 中等（秒级） | 含井眼/侵入带的轴对称模型 |
+| **2D 张量** | 2D TensorMesh FVM | 中等 | 非轴对称 2D 模型、倾斜仪器 |
 | **3D 直角** | TensorMesh FVM | 最慢（分钟级） | 倾斜井/非对称结构/块体异常 |
 
 ### 2.3 数据排列顺序
@@ -485,7 +490,146 @@ if not report['ok']:
 
 ---
 
-## 10. 示例脚本索引
+## 10. 高级分析功能
+
+### 10.1 张量观测系统
+
+三轴源 × 三轴接收器构建 9 分量张量 Survey：
+
+```python
+from src.lwd_fdem import build_tensor_survey, build_tensor_receivers, tensor_data_order
+
+survey = build_tensor_survey(
+    frequencies=(1e4, 1e5),
+    spacings=np.array([10.0, 14.0]),
+    field_kind="h",
+    secondary=False,
+    components=("real", "imag"),
+    receiver_geometry="axial",
+    rx_orientations=("x", "y", "z"),
+    src_orientations=("x", "y", "z"),
+)
+# 数据排列：频率 → 源取向(3) → 收发距 → 接收取向(3) → 分量(2)
+```
+
+### 10.2 各向异性正演（VTI）
+
+```python
+fwd_ani = LWDFDEMForward(
+    "3d", tool, mesh=mesh_3d,
+    anisotropic=True,    # 启用各向异性路径
+)
+
+# 模型向量: [σh_all_cells, σv_all_cells] (flat 1D)
+# 内部通过 _AnisotropicSigmaMap 转为 (n_cells, 3) = [σh, σh, σv]
+sigma_ani = np.concatenate([0.1 * np.ones(mesh_3d.n_cells),
+                            0.05 * np.ones(mesh_3d.n_cells)])
+d_ani = fwd_ani.dpred(sigma_ani)
+```
+
+1d_tensor 路径支持层状参数化 + 各向异性：
+
+```python
+fwd_1d_ani = LWDFDEMForward(
+    "1d_tensor", tool,
+    layer_thicknesses=np.array([5.0, 10.0]),
+    anisotropic=True,
+)
+# 模型: [σh_layer0, σh_layer1, σh_layer2, σv_layer0, σv_layer1, σv_layer2]
+d = fwd_1d_ani.dpred(np.array([0.1, 0.5, 0.01, 0.05, 0.25, 0.005]))
+```
+
+### 10.3 视电阻率转换
+
+```python
+from src.lwd_fdem import apparent_resistivity_from_hz, apparent_resistivity_from_forward
+
+# 基于 Hz 解析解的半空间视电阻率
+rho_a = apparent_resistivity_from_hz(
+    frequency=1e4, hz_measured=1e-5 + 0.5j * 1e-5,
+    offset=1.0, method="amplitude",
+)
+
+# 基于正演的视电阻率（适用于任意几何）
+rho_a_matrix = apparent_resistivity_from_forward(fwd, sigma_model, d)
+```
+
+### 10.4 探测深度（DOI）分析
+
+```python
+from src.lwd_fdem import doi_1d_sensitivity, doi_skin_depth_estimate, doi_summary
+
+# 基于灵敏度的 1D DOI
+doi_result = doi_1d_sensitivity(fwd, sigma_model, threshold_ratio=0.1)
+print(f"探测深度: {doi_result['doi_depth']:.1f} m")
+print(f"可靠层: {doi_result['reliable_mask']}")
+
+# 趋肤深度估计
+delta = doi_skin_depth_estimate(fwd.tool.frequencies, sigma_model)
+
+# 汇总报告
+summary = doi_summary(fwd, sigma_model)
+```
+
+### 10.5 滑动窗口反演
+
+沿井深逐窗口 1D 反演，生成连续电阻率剖面：
+
+```python
+from src.lwd_fdem import sliding_window_inversion_1d, simple_window_builder, simple_inversion_runner
+
+result = sliding_window_inversion_1d(
+    depths=depth_array,
+    data_at_depths=data_cube,
+    forward_builder=lambda: fwd_template,
+    inversion_runner=simple_inversion_runner,
+    window_size=5,
+    step=1,
+)
+# result['depths']       —— 深度数组
+# result['sigma_mid']    —— 各深度反演的中层电导率
+# result['sigma_models'] —— 各深度完整模型
+```
+
+### 10.6 灵敏度矩阵
+
+```python
+from src.lwd_fdem import compute_sensitivity_matrix, compute_sensitivity_diagonal
+
+# 完整 J 矩阵 (nD × nP)
+J = compute_sensitivity_matrix(fwd, sigma_model)
+
+# JᵀJ 对角元（更省内存）
+diag = compute_sensitivity_diagonal(fwd, sigma_model)
+```
+
+### 10.7 并行频率计算
+
+```python
+from src.lwd_fdem import forward_parallel_frequencies
+
+# 各频率独立正演，用 concurrent.futures 并行
+results = forward_parallel_frequencies(tool, sigma_model, geometry="1d",
+                                        layer_thicknesses=np.array([2.0, 4.0]))
+```
+
+### 10.8 LAS 2.0 导出
+
+```python
+from src.lwd_fdem import export_las2
+
+export_las2(
+    filename="result.las",
+    depths=depth_array,
+    data={"RHOO": sigma_recovered},
+    well_name="Well-01",
+    company="LWD-EM-Inv",
+)
+```
+
+---
+
+## 11. 示例脚本索引
 
 | 脚本 | 几何 | 演示内容 |
 |------|------|---------|
@@ -501,6 +645,11 @@ if not report['ok']:
 | `vertical_well_advanced.py` | 2D | 偶极子/回线源、Occam/稀疏对比 |
 | `cole_cole_dispersion.py` | 1D | Cole-Cole 频散效应 |
 | `benchmark_analytic.py` | 1D | 数值解 vs 解析解验证 |
+| `test_apparent_resistivity.py` | 1D | 视电阻率转换 |
+| `test_doi_analysis.py` | 1D | 探测深度（DOI）分析 |
+| `test_sliding_window.py` | 1D | 滑动窗口反演 |
+| `test_tensor_survey.py` | 3D | 张量多分量观测系统 |
+| `test_advanced.py` | 1D/2D | 高级功能综合演示 |
 
 运行示例：
 
